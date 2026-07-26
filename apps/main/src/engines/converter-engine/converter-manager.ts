@@ -1,97 +1,66 @@
-import { randomUUID } from "node:crypto";
-import path from "node:path";
 import type { BrowserWindow } from "electron";
-import { ConverterJob } from "./converter-job";
-import { CloudConvertConverter, getSupportedOutputFormats, CONVERSION_PRESETS } from "./cloudconvert-converter";
-import { resolveBinaries } from "../social-extractor/binaries";
-import { reserveUniqueFilepath } from "../../utils/filename";
-import { settingsStore } from "../../settings/settings-store";
+import { UniversalConverter, getSupportedFormats, CONVERSION_PRESETS, type ConversionOptions } from "./universal-converter";
 
-const KIND_ARGS: Record<"extract-audio" | "mux", string[]> = {
-  "extract-audio": ["-vn", "-acodec", "libmp3lame", "-q:a", "2"],
-  "mux": ["-c", "copy"],
-};
-
+/**
+ * ConverterManager - 100% offline FFmpeg-based converter
+ * Supports all major video, audio, and image format conversions
+ * with hardware acceleration (GPU) support when available
+ */
 export class ConverterManager {
-  private jobs = new Map<string, ConverterJob>();
-  private cloudConvert: CloudConvertConverter | null = null;
+  private converter: UniversalConverter;
 
-  constructor(private getWindow: () => BrowserWindow | null) {
-    this.initializeCloudConvert();
-  }
-
-  private initializeCloudConvert(): void {
-    const settings = settingsStore.get();
-    if (settings.useCloudConvert && settings.cloudConvertApiKey) {
-      this.cloudConvert = new CloudConvertConverter(
-        {
-          apiKey: settings.cloudConvertApiKey,
-          sandbox: settings.cloudConvertSandbox,
-        },
-        this.getWindow
-      );
-    }
+  constructor(getWindow: () => BrowserWindow | null) {
+    this.converter = new UniversalConverter(getWindow);
   }
 
   /**
-   * Legacy FFmpeg-based conversion (extract-audio, mux)
+   * Legacy API: Simple audio extraction
    */
   async convert(inputPath: string, kind: "extract-audio" | "mux"): Promise<{ taskId: string }> {
-    const { ffmpeg } = resolveBinaries();
-    const taskId = randomUUID();
-    const ext = kind === "extract-audio" ? ".mp3" : path.extname(inputPath);
-    const outputName = `${path.basename(inputPath, path.extname(inputPath))}${ext}`;
-    const outputPath = await reserveUniqueFilepath(path.dirname(inputPath), outputName);
-
-    const job = new ConverterJob();
-    this.jobs.set(taskId, job);
-
-    void job.run(
-      { inputPath, outputPath, ffmpegArgs: KIND_ARGS[kind], ffmpegPath: ffmpeg },
-      {
-        onProgress: (percent) => this.getWindow()?.webContents.send("download:progress", { id: taskId, downloadedBytes: percent, totalBytes: 100, speedBps: 0, etaSec: null }),
-        onDone: () => { this.getWindow()?.webContents.send("download:status", { id: taskId, status: "complete" }); this.jobs.delete(taskId); },
-        onError: (message) => { this.getWindow()?.webContents.send("download:status", { id: taskId, status: "failed", errorMessage: message }); this.jobs.delete(taskId); },
-      },
-    );
-
-    return { taskId };
+    if (kind === "extract-audio") {
+      return this.converter.convert({
+        inputPath,
+        outputFormat: "mp3",
+        audioCodec: "libmp3lame",
+        audioBitrate: "192k",
+        quality: "high",
+      });
+    } else {
+      // Mux: copy both streams without re-encoding
+      return this.converter.convert({
+        inputPath,
+        outputFormat: "mp4",
+        customArgs: ["-c", "copy"],
+      });
+    }
   }
 
   /**
-   * CloudConvert-based conversion (any format to any format)
-   * Supports video, audio, images, documents, archives, ebooks
+   * Universal conversion: any format to any format
+   * Supports video, audio, and images with full control
    */
-  async cloudConvertFile(
+  async universalConvert(
     inputPath: string,
-    inputFormat: string,
     outputFormat: string,
-    outputDir?: string,
-    conversionOptions?: Record<string, unknown>
+    options?: Partial<ConversionOptions>
   ): Promise<{ taskId: string }> {
-    // Re-initialize if settings changed
-    if (!this.cloudConvert) {
-      this.initializeCloudConvert();
-    }
-
-    if (!this.cloudConvert) {
-      throw new Error("CloudConvert is not configured. Please add your API key in Settings.");
-    }
-
-    return this.cloudConvert.convert({
+    return this.converter.convert({
       inputPath,
-      inputFormat,
       outputFormat,
-      outputDir,
-      conversionOptions,
+      ...options,
     });
   }
 
   /**
-   * Get supported output formats for a given input format
+   * Get supported formats by category
    */
-  getSupportedFormats(inputFormat: string): string[] {
-    return getSupportedOutputFormats(inputFormat);
+  getSupportedFormats(): {
+    video: string[];
+    audio: string[];
+    image: string[];
+    all: string[];
+  } {
+    return getSupportedFormats();
   }
 
   /**
@@ -101,17 +70,10 @@ export class ConverterManager {
     return CONVERSION_PRESETS;
   }
 
+  /**
+   * Cancel a conversion task
+   */
   cancel(taskId: string): void {
-    // Try FFmpeg job first
-    const ffmpegJob = this.jobs.get(taskId);
-    if (ffmpegJob) {
-      ffmpegJob.cancel();
-      return;
-    }
-
-    // Try CloudConvert job
-    if (this.cloudConvert) {
-      this.cloudConvert.cancel(taskId);
-    }
+    this.converter.cancel(taskId);
   }
 }

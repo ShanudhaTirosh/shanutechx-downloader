@@ -115,11 +115,6 @@ export interface AppSettings {
 
   minimizeToTray: boolean;
   theme: "dark"; // light mode reserved for a future release
-
-  // CloudConvert API settings
-  cloudConvertApiKey: string;
-  cloudConvertSandbox: boolean;
-  useCloudConvert: boolean; // Toggle between FFmpeg and CloudConvert
 }
 
 // ── IPC contract ──────────────────────────────────────────────────────────────
@@ -155,18 +150,28 @@ export interface IpcInvokeMap {
   "torrents:remove": { req: { infoHash: string }; res: { success: boolean } };
 
   "converter:convert": { req: { inputPath: string; kind: "extract-audio" | "mux" }; res: { taskId: string } };
-  "converter:cloudconvert": { 
+  "converter:universalConvert": { 
     req: { 
       inputPath: string; 
-      inputFormat: string; 
-      outputFormat: string; 
+      outputFormat: string;
+      quality?: "low" | "medium" | "high" | "ultra" | "lossless";
+      videoCodec?: string;
+      videoBitrate?: string;
+      resolution?: string;
+      fps?: number;
+      preset?: "ultrafast" | "superfast" | "veryfast" | "faster" | "fast" | "medium" | "slow" | "slower" | "veryslow";
+      audioCodec?: string;
+      audioBitrate?: string;
+      audioChannels?: number;
+      audioSampleRate?: number;
+      hwAccel?: "auto" | "nvenc" | "qsv" | "amf" | "none";
       outputDir?: string;
-      conversionOptions?: Record<string, unknown>;
+      customArgs?: string[];
     }; 
     res: { taskId: string } 
   };
-  "converter:getSupportedFormats": { req: { inputFormat: string }; res: { formats: string[] } };
-  "converter:getPresets": { req: void; res: { presets: Record<string, { outputFormat: string; options: Record<string, unknown> }> } };
+  "converter:getSupportedFormats": { req: void; res: { video: string[]; audio: string[]; image: string[]; all: string[] } };
+  "converter:getPresets": { req: void; res: { presets: Record<string, unknown> } };
 
   "history:list": { req: void; res: DownloadRecord[] };
   "history:stats": { req: void; res: { totalCompleted: number; totalFailed: number; totalBytesDownloaded: number } };
