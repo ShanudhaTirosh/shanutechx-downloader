@@ -8,11 +8,8 @@ on:
 
 jobs:
   build:
-    name: Build for ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+    name: Build for Windows
+    runs-on: windows-latest
 
     steps:
       - name: Checkout code
@@ -37,25 +34,7 @@ jobs:
       - name: Build main
         run: pnpm --filter @shanutechx/main build
 
-      - name: Package application (Windows)
-        if: matrix.os == 'windows-latest'
-        run: pnpm --filter @shanutechx/main package
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Package application (macOS)
-        if: matrix.os == 'macos-latest'
-        run: pnpm --filter @shanutechx/main package
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-
-      - name: Package application (Linux)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Package application
         run: pnpm --filter @shanutechx/main package
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -63,14 +42,9 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }}-build
+          name: windows-build
           path: |
             apps/main/dist/**/*.exe
-            apps/main/dist/**/*.dmg
-            apps/main/dist/**/*.AppImage
-            apps/main/dist/**/*.snap
-            apps/main/dist/**/*.deb
-            apps/main/dist/**/*.rpm
             apps/main/dist/**/*.yml
             apps/main/dist/**/*.yaml
 
@@ -100,11 +74,6 @@ jobs:
           generate_release_notes: true
           files: |
             artifacts/**/*.exe
-            artifacts/**/*.dmg
-            artifacts/**/*.AppImage
-            artifacts/**/*.snap
-            artifacts/**/*.deb
-            artifacts/**/*.rpm
             artifacts/**/*.yml
             artifacts/**/*.yaml
         env:

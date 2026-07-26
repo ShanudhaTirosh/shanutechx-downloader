@@ -14,18 +14,18 @@ asarUnpack:
   - "**/*.node"
 win:
   target: [nsis]
-  icon: build/icon.ico
+  # icon: build/icon.ico  # TODO: Uncomment after generating ICO file from SVG
   # Real OV/EV cert only — see Phase 5 of the implementation plan. Never ship
   # a self-signed cert in a production build config.
-mac:
-  target: [dmg]
-  icon: build/icon.icns
-  hardenedRuntime: true
-  notarize: true
-linux:
-  target: [AppImage, deb]
-  icon: build/icon.png
-  category: Network
+# mac:
+#   target: [dmg]
+#   icon: build/icon.icns
+#   hardenedRuntime: true
+#   notarize: true
+# linux:
+#   target: [AppImage, deb]
+#   icon: build/icon.png
+#   category: Network
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
