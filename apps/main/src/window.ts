@@ -26,6 +26,14 @@ export function createMainWindow(): BrowserWindow {
 
   win.once("ready-to-show", () => win.show());
 
+  // Broadcast maximize state changes to renderer for title bar button state
+  win.on("maximize", () => {
+    win.webContents.send("window:maximized-change", { maximized: true });
+  });
+  win.on("unmaximize", () => {
+    win.webContents.send("window:maximized-change", { maximized: false });
+  });
+
   // Real read-site for `minimizeToTray` — a genuine Tray icon + close-to-tray
   // behavior, not a checkbox that's saved and never consulted. When enabled,
   // closing the window hides it instead of quitting; the tray menu is the

@@ -166,12 +166,19 @@ export class QueueManager {
       this.lastSample.set(id, { bytes: downloadedBytes, time: now });
     }
 
-    win?.webContents.send("download:progress", { id, downloadedBytes, totalBytes: sizeBytes, speedBps, etaSec: null });
+    // Calculate ETA: remaining bytes divided by current speed
+    let etaSec: number | null = null;
+    if (sizeBytes && speedBps > 0) {
+      const remainingBytes = sizeBytes - downloadedBytes;
+      etaSec = Math.max(0, remainingBytes / speedBps);
+    }
+
+    win?.webContents.send("download:progress", { id, downloadedBytes, totalBytes: sizeBytes, speedBps, etaSec });
 
     if (now - this.lastGlobalSpeedBroadcast > 500) {
       this.lastGlobalSpeedBroadcast = now;
       const downBps = Array.from(this.currentSpeeds.values()).reduce((a, b) => a + b, 0);
-      win?.webContents.send("queue:global-speed", { downBps, upBps: 0 });
+      win?.webContents.send("queue:global-speed", { downBps, upBps: 0, activeCount: this.active.size });
     }
   }
 

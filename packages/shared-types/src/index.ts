@@ -153,6 +153,16 @@ export interface IpcInvokeMap {
   "history:remove": { req: { id: string }; res: void };
 
   "app:getVersion": { req: void; res: { version: string } };
+  "app:minimize": { req: void; res: void };
+  "app:maximize": { req: void; res: void };
+  "app:unmaximize": { req: void; res: void };
+  "app:close": { req: void; res: void };
+  "app:isMaximized": { req: void; res: { maximized: boolean } };
+  "app:selectFile": { req: { title?: string; filters?: { name: string; extensions: string[] }[] }; res: { filePath: string | null } };
+  "app:checkBinaries": { req: void; res: { ytdlp: boolean; ffmpeg: boolean; ffprobe: boolean } };
+  "app:downloadBinaries": { req: void; res: { success: boolean } };
+  "app:checkForUpdates": { req: void; res: { updateAvailable: boolean; version?: string; releaseNotes?: string } };
+  "app:downloadUpdate": { req: void; res: void };
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeMap;
@@ -166,8 +176,13 @@ export interface IpcEventMap {
     etaSec: number | null;
   };
   "download:status": { id: string; status: DownloadStatus; errorMessage?: string };
-  "queue:global-speed": { downBps: number; upBps: number };
+  "queue:global-speed": { downBps: number; upBps: number; activeCount: number };
   "torrent:status": TorrentStatus;
+  "window:maximized-change": { maximized: boolean };
+  "binary:download-progress": { binary: string; percent: number; downloadedBytes: number; totalBytes: number | null };
+  "update:available": { version: string; releaseNotes: string };
+  "update:download-progress": { percent: number };
+  "update:downloaded": void;
 }
 
 export type IpcEventChannel = keyof IpcEventMap;

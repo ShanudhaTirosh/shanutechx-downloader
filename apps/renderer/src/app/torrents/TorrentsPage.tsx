@@ -60,7 +60,19 @@ export function TorrentsPage() {
       </form>
 
       {list.length === 0 ? (
-        <Card className="text-center py-16 text-sm text-zinc-600">No active torrents.</Card>
+        <Card className="text-center py-12">
+          <div className="flex flex-col items-center gap-4">
+            <div className="h-12 w-12 rounded-xl bg-surface-raised flex items-center justify-center text-zinc-600">
+              <Magnet size={20} />
+            </div>
+            <div>
+              <p className="text-sm text-zinc-400 mb-1">No active torrents</p>
+              <p className="text-xs text-zinc-600">
+                Paste a magnet link above to start downloading
+              </p>
+            </div>
+          </div>
+        </Card>
       ) : (
         <div className="flex flex-col gap-3">
           {list.map((t) => (

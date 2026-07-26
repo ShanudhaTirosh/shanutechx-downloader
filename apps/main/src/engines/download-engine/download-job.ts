@@ -139,6 +139,21 @@ export class DownloadJob {
         return;
       } catch (err) {
         if (this.abortController.signal.aborted) throw err; // never retry a genuine user cancel
+        
+        // Check if error is a permanent failure (don't retry)
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        const isPermanentFailure = 
+          errorMsg.includes("404") || 
+          errorMsg.includes("403") || 
+          errorMsg.includes("401") ||
+          errorMsg.includes("410") || // Gone
+          errorMsg.includes("Not Found") ||
+          errorMsg.includes("Forbidden");
+        
+        if (isPermanentFailure) {
+          throw err; // Don't retry permanent failures
+        }
+        
         attempt++;
         if (attempt > this.retryAttempts) throw err;
         // Exponential-ish backoff, capped — and RESUME from the bytes this

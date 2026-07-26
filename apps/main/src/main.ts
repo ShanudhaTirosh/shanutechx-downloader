@@ -12,6 +12,7 @@ app.setName("SHANUTECHX Downloader");
 import { createMainWindow } from "./window";
 import { enforceSingleInstance } from "./single-instance";
 import { registerAllHandlers } from "./ipc/handlers";
+import { initializeAutoUpdater } from "./ipc/handlers/app";
 import { runShutdownSequence, type ShutdownStep } from "./shutdown";
 import { getDb, closeDb } from "./db/client";
 import { settingsStore, onSettingsChange } from "./settings/settings-store";
@@ -20,6 +21,7 @@ import { QueueManager } from "./queue/queue-manager";
 import { SocialManager } from "./engines/social-extractor/social-manager";
 import { TorrentEngine } from "./engines/torrent-engine/torrent-engine";
 import { ConverterManager } from "./engines/converter-engine/converter-manager";
+import { initializeBinaries } from "./utils/binary-manager";
 
 log.initialize();
 log.info("SHANUTECHX Downloader starting…");
@@ -36,7 +38,7 @@ const isPrimaryInstance = enforceSingleInstance(() => {
 });
 
 if (isPrimaryInstance) {
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     Menu.setApplicationMenu(null); // custom title bar owns the app chrome
 
     getDb(); // opens the single long-lived connection, runs schema setup
@@ -51,11 +53,31 @@ if (isPrimaryInstance) {
     onSettingsChange(applyOsLevelSettings);
 
     mainWindow = createMainWindow();
+    
+    // Initialize binaries (yt-dlp, ffmpeg, ffprobe) before starting engines
+    try {
+      log.info("Checking for required binaries...");
+      const downloaded = await initializeBinaries((progress) => {
+        mainWindow?.webContents.send("binary:download-progress", progress);
+      });
+      if (downloaded) {
+        log.info("Binaries downloaded successfully");
+      } else {
+        log.info("All binaries already present");
+      }
+    } catch (error) {
+      log.error("Failed to initialize binaries:", error);
+      // Continue anyway - app will show error when user tries to use features
+    }
+
     queueManager = new QueueManager(() => mainWindow);
     const socialManager = new SocialManager(() => mainWindow);
     torrentEngine = new TorrentEngine(() => mainWindow);
     const converterManager = new ConverterManager(() => mainWindow);
     registerAllHandlers(queueManager, socialManager, torrentEngine, converterManager);
+
+    // Initialize auto-updater for GitHub releases
+    initializeAutoUpdater();
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) mainWindow = createMainWindow();
@@ -90,3 +112,4 @@ if (isPrimaryInstance) {
     runShutdownSequence(steps).finally(() => app.exit(0));
   });
 }
+

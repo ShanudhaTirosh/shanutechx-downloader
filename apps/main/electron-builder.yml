@@ -3,7 +3,7 @@ productName: SHANUTECHX Downloader
 executableName: shanutechx-downloader
 copyright: "© 2026 SHANUTECHX"
 directories:
-  output: release
+  output: dist
   buildResources: build
 files:
   - dist/**/*
@@ -29,8 +29,12 @@ linux:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
 publish:
-  provider: generic
-  # Point this at your own AWS VPS/Nginx-hosted update feed (electron-updater
-  # reads latest.yml from here). Configure per-environment before release.
-  url: https://updates.shanutechx.com/downloader/
+  provider: github
+  owner: ShanudhaTirosh
+  repo: shanutechx-downloader
+  releaseType: release
+

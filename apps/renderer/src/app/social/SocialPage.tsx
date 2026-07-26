@@ -2,11 +2,13 @@ import { useState, useEffect } from "react";
 import { Link2, Search, Loader2, Download as DownloadIcon } from "lucide-react";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
+import { useToast } from "../../components/ui/Toast";
 import { ipc } from "../../lib/ipc-client";
 import { formatBytes, formatEta } from "../../lib/format";
 import type { MediaInfo, MediaFormatOption } from "@shanutechx/shared-types";
 import { useDownloadsStore } from "../../stores/downloadsStore";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { useUiStore } from "../../stores/uiStore";
 
 export function SocialPage() {
   const [url, setUrl] = useState("");
@@ -15,6 +17,8 @@ export function SocialPage() {
   const [info, setInfo] = useState<MediaInfo | null>(null);
   const refresh = useDownloadsStore((s) => s.refresh);
   const { settings, load: loadSettings } = useSettingsStore();
+  const setActiveTab = useUiStore((s) => s.setActiveTab);
+  const { showToast } = useToast();
 
   useEffect(() => { void loadSettings(); }, [loadSettings]);
 
@@ -30,15 +34,44 @@ export function SocialPage() {
       const result = await ipc.invoke("social:extract", { url: url.trim() });
       setInfo(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't extract info from that URL.");
+      const errorMsg = err instanceof Error ? err.message : "Unknown error";
+      
+      // Provide specific error messages based on error type
+      if (errorMsg.includes("Unsupported URL")) {
+        setError("This platform isn't supported. Try YouTube, TikTok, Instagram, or other major sites.");
+      } else if (errorMsg.includes("network") || errorMsg.includes("timeout")) {
+        setError("Network error. Check your connection and try again.");
+      } else if (errorMsg.includes("yt-dlp")) {
+        setError("Media extractor error. The video may be private, deleted, or region-locked.");
+      } else {
+        setError(`Couldn't extract info: ${errorMsg}`);
+      }
     } finally {
       setLoading(false);
     }
   }
 
   async function handleDownload(format: MediaFormatOption) {
-    await ipc.invoke("social:download", { url: url.trim(), format });
-    await refresh();
+    try {
+      await ipc.invoke("social:download", { url: url.trim(), format });
+      await refresh();
+      
+      showToast(
+        `Started downloading "${info?.title || 'media'}" in ${format.label}`,
+        "success",
+        4000
+      );
+      
+      // Auto-navigate to downloads page after a brief delay
+      setTimeout(() => {
+        setActiveTab("downloads");
+      }, 1500);
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Failed to start download",
+        "error"
+      );
+    }
   }
 
   return (
@@ -111,3 +144,4 @@ function QualityRow({ label, size, onDownload, preferred }: { label: string; siz
     </div>
   );
 }
+

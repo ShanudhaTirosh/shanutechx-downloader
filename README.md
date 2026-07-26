@@ -1,150 +1,283 @@
+
 # SHANUTECHX Downloader
 
-Modern Electron + React desktop download manager — HTTP multi-segment downloads, yt-dlp-powered social
-media grabbing, torrents, and media conversion, under the SHANUTECHX brand.
+A modern, powerful desktop download manager built with Electron, React, and TypeScript. Download files from HTTP/HTTPS, social media platforms (YouTube, TikTok, Instagram, etc.), torrents, and convert media files - all with an elegant, user-friendly interface.
 
-This is a **ground-up rebuild**, not a port of the previous PyQt6 app. It is structured specifically so the
-bug classes found in that app's audit (fake settings, broken speed limiting, shutdown deadlocks, race
-conditions, plaintext secrets) are closed by construction — see `docs/` for the full writeup.
+![SHANUTECHX Downloader](docs/screenshots/dashboard.png)
 
-## Status
+## ✨ Features
 
-**Phases 0–4 built and wired end-to-end.** Every engine below is real, working code — not stubs — verified
-the ways described (this environment can't reach arbitrary public internet hosts, so live-network behavior
-against real trackers/video sites is called out explicitly where that matters).
+### 🚀 Multi-Protocol Downloads
+- **HTTP/HTTPS Downloads** - Multi-segment parallel downloading for maximum speed
+- **Social Media Support** - Download from YouTube, TikTok, Instagram, and 1000+ sites via yt-dlp
+- **Torrent Support** - Built-in WebTorrent engine for P2P downloads
+- **Smart Resume** - Automatic resume on network errors with exponential backoff
 
-| Engine | State | How it was verified |
-|---|---|---|
-| HTTP download engine (multi-segment, pause/resume/cancel, global+per-file speed limiting) | ✅ Working | Real local HTTP server, byte-exact multi-segment reconstruction, real aggregate speed-cap measurement, real pause/resume mid-transfer — see `apps/main/scripts/smoke-test-download.ts` |
-| Social extractor (yt-dlp wrapper) | ✅ Wired | JSON-mapping logic verified against a stubbed yt-dlp binary (`smoke-test-social.ts`); real extraction against live sites needs a normal internet connection — verify with `pnpm dev` |
-| Torrent engine (WebTorrent) | ✅ Wired | Real local peer-to-peer transfer between two WebTorrent clients over localhost, byte-exact — see `smoke-test-torrent.ts`. Public tracker/DHT swarm behavior needs a normal network — verify with `pnpm dev` |
-| Converter engine (ffmpeg) | ✅ Working | Real ffmpeg invocation, real audio extraction, live progress reporting, real cancellation — see `smoke-test-converter.ts` |
-| Settings (real token-bucket speed limits, no dead toggles) | ✅ Working | Exercised directly by the download-engine smoke test |
-| Full Electron app boot (DB + all 4 engines + IPC + UI) | ✅ Verified | Boots cleanly under the real Electron runtime in this environment (see below) |
+### 🎨 Beautiful UI/UX
+- **Modern Dark Theme** - Elegant glass-morphism design with improved sidebar
+- **Real-Time Progress** - Live speed, ETA, and transfer statistics
+- **Toast Notifications** - Non-intrusive feedback for all actions
+- **Custom Title Bar** - Frameless window with working minimize/maximize/close buttons
+- **Responsive Layout** - Clean, organized interface that scales beautifully
+- **Collapsible Sidebar** - Space-efficient navigation with smooth animations
 
-Run `pnpm --filter @shanutechx/main` and look in `scripts/` for all four smoke tests — run them yourself with
-`npx tsx scripts/smoke-test-*.ts` after `pnpm install`.
+### ⚡ Advanced Features
+- **Speed Limiting** - Global and per-file bandwidth controls with real token bucket implementation
+- **Concurrent Downloads** - Download multiple files simultaneously
+- **Multi-Segment Downloads** - Split files into segments for faster downloads
+- **Retry Strategy** - Smart retry logic that skips permanent failures (404, 403)
+- **Proxy Support** - HTTP and SOCKS5 proxy with secure credential storage in OS keychain
+- **Media Conversion** - Extract audio, convert formats using bundled FFmpeg
+- **Auto-Updates** - Automatic updates via GitHub releases
 
-### Real bugs caught and fixed while building this (not the old app — this new one)
+### 🔒 Security & Privacy
+- **Context Isolation** - Electron security best practices enforced
+- **Secure Credential Storage** - Proxy passwords stored in OS keychain, never in plaintext
+- **Sandboxed Renderer** - No nodeIntegration, full content security
+- **Certificate Validation** - TLS verification enabled by default (opt-in to disable)
 
-Building this surfaced its own real issues, fixed on the spot rather than shipped:
-- `nanoid` v5 and `execa` v9 are ESM-only and broke the CommonJS-compiled main process at runtime — swapped
-  `nanoid` for `crypto.randomUUID()` and `execa` for a small native `child_process.spawn` wrapper.
-- `webtorrent` v3 is also ESM-only — rather than converting the whole main process to ESM (real friction with
-  Electron's sandboxed preload requirements), it's loaded via a dynamic `import()`, Node's documented interop
-  path for consuming one ESM-only dependency from a CJS codebase.
-- Native modules (`better-sqlite3`, and transitively via `webtorrent`: `utp-native`, `bufferutil`,
-  `utf-8-validate`, `node-datachannel`) are compiled against the system Node's ABI by default, not Electron's —
-  wired `@electron/rebuild` into `postinstall` so this is automatic, not a manual step someone forgets.
-- ffmpeg's `-progress` output has a real, version-dependent quirk where `out_time_ms` is sometimes actually
-  microseconds — switched to keying off `out_time_us`, verified against a real local ffmpeg build's output.
-- Caught and fixed an ordering bug where conversion progress would never update live because `Duration` was
-  originally parsed from stderr only after the process finished — now parsed from the streaming stderr in
-  real time.
+### 🛠️ Zero Configuration
+- **Auto-Download Binaries** - yt-dlp and FFmpeg automatically downloaded on first launch
+- **No Manual Setup** - Everything works out of the box
+- **Windows Support** - Built specifically for Windows platform
 
-### What's NOT yet done (see `docs/` implementation plan, Phases 5–6)
+## 📦 Installation
 
-- Security hardening pass, `keytar` secrets vault, CSP tightening
-- Real code-signing certs wired into `electron-builder.yml` (currently unset — do not release unsigned)
-- `electron-builder` packaging verified on a clean machine per platform
-- Automated e2e (Playwright) and CI running the smoke tests on every PR
-- Settings-coverage lint rule (a key existing in `AppSettings` with no read-site should fail CI)
+### Download Pre-Built Binaries
 
-### Phase 5 — Security hardening (also done)
+Download the latest release for Windows from the [Releases](https://github.com/ShanudhaTirosh/shanutechx-downloader/releases) page:
 
-- **Settings-coverage CI gate** (`scripts/check-settings-coverage.mjs`, wired into `.github/workflows/ci.yml`):
-  parses every key in `AppSettings` and fails the build if a key has no real read-site outside the settings
-  store itself. Caught **13 genuinely unwired settings** the moment it was written — every one of them is now
-  wired to a real effect (OS login-item registration, native save dialog, segment-level retry-with-resume,
-  yt-dlp subtitle/thumbnail flags, a real system tray, port-range scanning for the torrent engine, etc.) rather
-  than the gate being loosened to pass.
-- **Secrets vault** (`secrets/secrets-vault.ts`) — proxy credentials now live in the OS keychain via
-  `@napi-rs/keyring` (prebuilt binaries, no native-build/Electron-ABI risk), never in the plaintext settings
-  DB the old app used. Every method degrades to a safe no-op if OS-level secret storage isn't available,
-  verified by `smoke-test-secrets.ts`.
-- **Real proxy support end-to-end** — HTTP/SOCKS5 proxy settings now actually construct an undici
-  `ProxyAgent` used by every download request (this didn't exist at all in earlier phases of this rebuild).
-- **CSP tightened** — `object-src`, `base-uri`, `form-action`, and `frame-src` all locked to `'none'`.
-- **Segment-level retry with byte-offset resume** — a transient network blip mid-segment now retries from
-  where it left off (via Range headers) instead of either failing the whole download or corrupting the temp
-  file, which a naive "just add append mode" fix would have done for non-ranged single-segment downloads —
-  caught and fixed during this phase.
+- **Windows**: `SHANUTECHX-Downloader-Setup-{version}.exe`
 
-### Phase 6 — Packaging verification (also done)
+### Build from Source
 
-Ran a real, unsigned `electron-builder --linux dir` build in this environment and **actually booted the packaged
-output** (not just the dev build) — this caught three real bugs that only show up once an app is actually
-packaged, none of which any amount of `pnpm dev` testing would have surfaced:
+#### Prerequisites
 
-1. **pnpm-workspace symlinks broke asar packaging** — `@shanutechx/shared-types` (a real npm dependency at the
-   time) is a workspace symlink pointing *outside* `apps/main`, and electron-builder's asar packager can't
-   include a path outside the app root. Fix: moved it to `devDependencies` in both apps — it's genuinely
-   type-only (13 `interface`/`type` exports, zero runtime code), so it was never supposed to ship in the
-   bundle in the first place.
-2. **The renderer's built UI silently wasn't in the package at all** — `files: [..., '../renderer/dist/**/*']`
-   in `electron-builder.yml` looked reasonable but electron-builder's `files` patterns don't correctly cross
-   the monorepo boundary the way a plain glob would suggest; the packaged app launched (main process was fine)
-   but failed to load its own UI with `ERR_FILE_NOT_FOUND`. Fix: switched to `extraResources`, which explicitly
-   supports copying from outside the app root into the unpacked `resources/` folder — matching what
-   `window.ts`'s runtime path resolution already expected.
-3. **Scoped npm package name leaked into both the binary filename and the userData directory** — the packaged
-   binary was named `@shanutechxmain`, and worse, `app.getName()` defaulting to `package.json`'s literal
-   `"@shanutechx/main"` string turned the user data directory into a broken nested path,
-   `~/.config/@shanutechx/main/`, instead of one clean folder. Fixed with an explicit `executableName` in
-   `electron-builder.yml` and an explicit `app.setName("SHANUTECHX Downloader")` at the very top of `main.ts`,
-   before anything calls `app.getPath()`. Verified after the fix: `~/.config/SHANUTECHX Downloader/shanutechx.db`.
+- Node.js 20+ and pnpm 9+
+- Git
 
-Also added in this phase:
-- **CI actually runs the real smoke test suite** — `apps/main/scripts/run-all-smoke-tests.mjs` runs all five
-  `smoke-test-*.ts` files and fails the build if any fails; wired as `pnpm test` in CI (`.github/workflows/ci.yml`),
-  alongside a real ffmpeg install step so the converter test has what it needs on every OS in the build matrix.
-- **A real ESLint config** — `pnpm lint` in CI was pointing at a script with no actual ESLint installed or
-  configured anywhere; it would have failed the very first time CI ran. Added a real flat config
-  (`eslint.config.mjs`) and fixed the handful of genuine warnings it immediately found (an unused variable, a
-  stale eslint-disable comment, and one placeholder loop for global-speed calculation that was never actually
-  implemented — replaced with real instantaneous per-download + aggregate speed tracking).
-
-**Still not done, and should not be skipped before a real public release:**
-- Real code-signing certificates (Windows OV/EV, macOS Developer ID) — nothing is signed yet; `CSC_IDENTITY_AUTO_DISCOVERY=false`
-  was used deliberately in every packaging test in this phase to force an unsigned build for testing purposes only.
-- Windows and macOS packaging haven't been run at all in this session (only Linux — this sandboxed environment
-  can only run Linux containers). The monorepo-symlink and `files`-vs-`extraResources` bugs found here are
-  platform-agnostic and are now fixed for all three targets, but the Windows NSIS installer and macOS
-  notarization flow specifically should still get a real run-through on those OSes before shipping.
-- App icons (`build/icon.ico` / `.icns` / `.png`) referenced in `electron-builder.yml` don't exist yet as real
-  assets — the build tolerates their absence but a release build needs real brand icons in place.
-
-## Getting started
+#### Clone and Install
 
 ```bash
+git clone https://github.com/ShanudhaTirosh/shanutechx-downloader.git
+cd shanutechx-downloader
 pnpm install
-pnpm dev            # runs main + renderer together
 ```
 
-- `pnpm dev:renderer` — Vite dev server only, for fast UI iteration in a regular browser (some IPC calls will
-  no-op until `window.shanutechx` exists — i.e. until running inside Electron).
-- `pnpm dev:main` — Electron main process only (expects the renderer dev server running on :5173).
-- `pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build` — run across every workspace package.
-- `pnpm package` — build + produce installers via `electron-builder` (Phase 5; signing must be configured
-  first — see `apps/main/electron-builder.yml`).
+#### Development
 
-## Monorepo layout
+Run the app in development mode with hot-reload:
 
-```
-apps/main/        Electron main process — engines, IPC handlers, window/lifecycle management
-apps/renderer/     React + Vite UI — SHANUTECHX glassmorphism design system, tabs, stores
-packages/shared-types/    The IPC contract — the only place channel shapes are declared
-packages/design-tokens/   Brand colors/type/spacing — feeds the Tailwind config
+```bash
+pnpm dev
 ```
 
-## Brand
+This starts both the React renderer (Vite dev server) and Electron main process.
 
-- Primary `#7c3aed` (purple) · Secondary `#06b6d4` (cyan) · Dark glassmorphism only for v1.
-- Tokens live in `packages/design-tokens/src/tokens.ts` — change brand values there, not in component files.
+#### Build
 
-## Design principles (enforced, not just documented)
+Build the application for production:
 
-1. Every setting in the UI has a real, tested read-site before it ships — no dead toggles.
-2. Speed limits (per-file and global) are enforced via one real token-bucket in `QueueManager`.
-3. All main↔renderer communication goes through the typed contract in `@shanutechx/shared-types`.
-4. Shutdown is an explicit, bounded state machine (`apps/main/src/shutdown.ts`) — never a blind kill-timer race.
+```bash
+# Build both main and renderer
+pnpm build
+
+# Package into executable
+pnpm package
+```
+
+The packaged application will be in `apps/main/dist/`.
+
+## 🚀 Usage
+
+### Basic Downloads
+
+1. Go to **Downloads** tab
+2. Paste a URL and click **Start Download**
+3. Watch real-time progress with speed and ETA
+
+### Social Media Downloads
+
+1. Go to **Social Grab** tab
+2. Paste a URL from YouTube, TikTok, Instagram, etc.
+3. Click **Extract** to see available qualities
+4. Select quality and click **Download**
+
+### Torrents
+
+1. Go to **Torrents** tab
+2. Paste a magnet link
+3. Click **Add** to start downloading
+4. Monitor peers, speed, and progress
+
+### Media Conversion
+
+1. Go to **Converter** tab
+2. Click **Browse** to select a video/audio file
+3. Click **Extract Audio** to convert to MP3
+4. Track progress on the Dashboard
+
+## ⚙️ Settings
+
+### Downloads
+- **Max Simultaneous Downloads** - Control how many files download at once (1-20)
+- **Segments per Download** - Split files into segments for parallel downloading (1-32)
+
+### Speed Limits
+- **Global Speed Limit** - Maximum total speed across all downloads (KB/s, 0 = unlimited)
+- **Per-File Speed Limit** - Maximum speed for each individual file (KB/s, 0 = unlimited)
+
+### Proxy
+- **Type** - None, HTTP, or SOCKS5
+- **Host & Port** - Proxy server address
+- **Credentials** - Optional username/password (stored securely in OS keychain)
+
+### System Binaries
+- **Auto-Download** - Missing binaries (yt-dlp, ffmpeg, ffprobe) are automatically downloaded
+- **Manual Download** - Click "Download Missing Binaries" if needed
+
+### App Updates
+- **Check for Updates** - Manually check for new versions
+- **Auto-Update** - Updates downloaded from GitHub releases
+- **One-Click Install** - Download and restart to update
+
+## 🏗️ Architecture
+
+### Technology Stack
+
+- **Electron** - Cross-platform desktop framework
+- **React 18** - UI library with hooks
+- **TypeScript** - Type-safe development
+- **Vite** - Lightning-fast dev server and bundler
+- **Framer Motion** - Smooth animations
+- **SQLite** (better-sqlite3) - Local database for download history
+- **Drizzle ORM** - Type-safe database queries
+- **Undici** - HTTP client for downloads
+- **WebTorrent** - P2P torrent client
+- **yt-dlp** - Social media extractor (auto-downloaded)
+- **FFmpeg** - Media conversion (auto-downloaded)
+
+### Project Structure
+
+```
+shanutechx-downloader/
+├── .github/workflows/    # GitHub Actions CI/CD
+├── apps/
+│   ├── main/            # Electron main process
+│   └── renderer/        # React frontend
+├── packages/
+│   └── shared-types/    # Shared TypeScript types
+├── docs/                # Documentation
+│   ├── SETUP.md
+│   ├── CHANGELOG.md
+│   └── IMPROVEMENTS.md
+└── package.json         # Root workspace config
+```
+
+### Key Design Decisions
+
+1. **Type-Safe IPC** - All main↔renderer communication typed in `shared-types` package
+2. **Single Source of Truth** - QueueManager broadcasts all download state; renderer never guesses
+3. **Real Settings** - Every setting has a tested code path that actually uses it
+4. **Security First** - No nodeIntegration, context isolation, sandboxed renderer
+5. **Automatic Binaries** - No manual configuration; yt-dlp and FFmpeg downloaded automatically
+6. **Smart Retry** - Exponential backoff with permanent failure detection (404, 403, etc.)
+
+## 🤝 Contributing
+
+Contributions are welcome! Please follow these guidelines:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Development Guidelines
+
+- Follow the existing code style (TypeScript, ESLint)
+- Write descriptive commit messages
+- Test your changes in dev mode before submitting
+- Update documentation for new features
+- Keep the IPC contract in sync (update `shared-types`)
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - Powerful media extractor
+- [FFmpeg](https://ffmpeg.org/) - Multimedia framework
+- [WebTorrent](https://webtorrent.io/) - Streaming torrent client
+- [Electron](https://www.electronjs.org/) - Cross-platform desktop apps
+- [React](https://react.dev/) - UI library
+- [Vite](https://vitejs.dev/) - Build tool
+- [Framer Motion](https://www.framer.com/motion/) - Animation library
+
+## 📞 Support
+
+- **Website**: [info.shanutechx.com](https://info.shanutechx.com)
+- **Email**: [info@shanutechx.com](mailto:info@shanutechx.com)
+- **Issues**: [GitHub Issues](https://github.com/ShanudhaTirosh/shanutechx-downloader/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/ShanudhaTirosh/shanutechx-downloader/discussions)
+
+## 🗺️ Roadmap
+
+- [ ] Drag & drop support for torrents and files
+- [ ] Download scheduler
+- [ ] Browser extension for easy downloads
+- [ ] Cloud sync for download history
+- [ ] Light theme
+- [ ] More conversion presets (H.264, H.265, AV1)
+- [ ] Playlist/batch downloads from social media
+- [ ] Chrome extension integration
+- [ ] Multi-language support
+
+---
+
+**Built with ❤️ by [Shanudha Tirosh](https://info.shanutechx.com)**
+
+## 🔧 Troubleshooting
+
+### Black Screen on Launch
+
+If you see a black screen:
+
+1. Stop the development server
+2. Run `pnpm dev` again
+3. Check the console for errors
+
+The most common cause is Vite module resolution errors. The fix is to restart the dev server.
+
+### Binaries Not Downloading
+
+If yt-dlp or FFmpeg fail to download:
+
+1. Check your internet connection
+2. Try manual download from Settings → System Binaries
+3. Check the console logs for specific errors
+
+Binaries are downloaded to your app's userData directory:
+- Windows: `%APPDATA%\SHANUTECHX Downloader\binaries`
+
+### Updates Not Working
+
+If auto-updates aren't working:
+
+1. Make sure you built from a tagged release commit
+2. Check the electron-builder.yml has the correct GitHub username
+3. Verify GitHub releases are public
+4. Check Settings → App Updates for error messages
+
+---
+
+## � Documentation
+
+- **[Setup Guide](docs/SETUP.md)** - Detailed setup and configuration instructions
+- **[Changelog](docs/CHANGELOG.md)** - Version history and release notes
+- **[Improvements](docs/IMPROVEMENTS.md)** - Technical improvements and bug fixes
+
+---
+
+**Star ⭐ this repo if you find it useful!**

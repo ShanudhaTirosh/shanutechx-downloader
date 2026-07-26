@@ -1,11 +1,14 @@
 import { useEffect } from "react";
-import { Download, CheckCircle2, XCircle, Gauge } from "lucide-react";
+import { Download, CheckCircle2, XCircle, Gauge, Plus, Link2, Folder } from "lucide-react";
 import { Card } from "../../components/ui/Card";
+import { Button } from "../../components/ui/Button";
 import { DownloadCard } from "../../components/widgets/DownloadCard";
 import { useDownloadsStore } from "../../stores/downloadsStore";
+import { useUiStore } from "../../stores/uiStore";
 
 export function DashboardPage() {
   const { items, refresh, subscribe } = useDownloadsStore();
+  const setActiveTab = useUiStore((s) => s.setActiveTab);
 
   useEffect(() => {
     void refresh();
@@ -33,7 +36,25 @@ export function DashboardPage() {
         <h2 className="text-sm font-semibold text-zinc-300">Active transfers</h2>
       </div>
       {active.length === 0 ? (
-        <Card className="text-center py-10 text-sm text-zinc-600">Nothing downloading right now.</Card>
+        <Card className="text-center py-12">
+          <div className="flex flex-col items-center gap-4">
+            <div className="h-12 w-12 rounded-xl bg-surface-raised flex items-center justify-center text-zinc-600">
+              <Download size={20} />
+            </div>
+            <div>
+              <p className="text-sm text-zinc-400 mb-1">No active downloads</p>
+              <p className="text-xs text-zinc-600">Start a download to see real-time progress here</p>
+            </div>
+            <div className="flex gap-2 mt-2">
+              <Button size="sm" variant="secondary" onClick={() => setActiveTab("downloads")}>
+                <Plus size={14} /> New Download
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setActiveTab("social")}>
+                <Link2 size={14} /> Social Grab
+              </Button>
+            </div>
+          </div>
+        </Card>
       ) : (
         <div className="flex flex-col gap-3">
           {active.map((item) => <DownloadCard key={item.id} item={item} />)}
@@ -57,3 +78,4 @@ function StatCard({ icon: Icon, label, value, tone }: { icon: typeof Gauge; labe
     </Card>
   );
 }
+

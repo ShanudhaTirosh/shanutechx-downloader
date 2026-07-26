@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { AppShell } from "./components/layout/AppShell";
+import { ToastProvider } from "./components/ui/Toast";
 import { useUiStore } from "./stores/uiStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { DashboardPage } from "./app/dashboard/DashboardPage";
@@ -36,8 +37,11 @@ export default function App() {
   }, [settings]);
 
   return (
-    <AppShell>
-      <Page />
-    </AppShell>
+    <ToastProvider>
+      <AppShell>
+        <Page />
+      </AppShell>
+    </ToastProvider>
   );
 }
+
