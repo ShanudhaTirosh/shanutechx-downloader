@@ -1,11 +1,13 @@
 import { request, type Dispatcher } from "undici";
 import path from "node:path";
 import { sanitizeFilename } from "../../utils/filename";
+import { isDriveUrl, convertDriveUrl } from "./drive-downloader";
 
 export interface ResolvedMeta {
   filename: string;
   sizeBytes: number | null; // null = unknown, never fabricated as 1 byte (audit fix, §3.3)
   acceptsRanges: boolean;
+  actualUrl?: string; // For redirected URLs (like Google Drive)
 }
 
 function filenameFromContentDisposition(header: string | undefined): string | null {
@@ -27,6 +29,22 @@ function filenameFromUrl(url: string): string {
 }
 
 export async function resolveMeta(url: string, dispatcher?: Dispatcher): Promise<ResolvedMeta> {
+  // Handle Google Drive URLs specially
+  if (isDriveUrl(url)) {
+    try {
+      const driveInfo = await convertDriveUrl(url, dispatcher);
+      return {
+        filename: sanitizeFilename(driveInfo.filename),
+        sizeBytes: driveInfo.size,
+        acceptsRanges: false, // Google Drive doesn't support range requests reliably
+        actualUrl: driveInfo.directUrl,
+      };
+    } catch (error) {
+      // Fall through to normal resolution if Drive conversion fails
+      console.error("Failed to resolve Google Drive URL:", error);
+    }
+  }
+
   let headers: Record<string, string> = {};
   let ok = false;
 

@@ -115,6 +115,11 @@ export interface AppSettings {
 
   minimizeToTray: boolean;
   theme: "dark"; // light mode reserved for a future release
+
+  // CloudConvert API settings
+  cloudConvertApiKey: string;
+  cloudConvertSandbox: boolean;
+  useCloudConvert: boolean; // Toggle between FFmpeg and CloudConvert
 }
 
 // ── IPC contract ──────────────────────────────────────────────────────────────
@@ -145,8 +150,23 @@ export interface IpcInvokeMap {
 
   "torrents:add": { req: { magnetOrPath: string; saveDir: string }; res: { infoHash: string } };
   "torrents:list": { req: void; res: TorrentStatus[] };
+  "torrents:pause": { req: { infoHash: string }; res: { success: boolean } };
+  "torrents:resume": { req: { infoHash: string }; res: { success: boolean } };
+  "torrents:remove": { req: { infoHash: string }; res: { success: boolean } };
 
   "converter:convert": { req: { inputPath: string; kind: "extract-audio" | "mux" }; res: { taskId: string } };
+  "converter:cloudconvert": { 
+    req: { 
+      inputPath: string; 
+      inputFormat: string; 
+      outputFormat: string; 
+      outputDir?: string;
+      conversionOptions?: Record<string, unknown>;
+    }; 
+    res: { taskId: string } 
+  };
+  "converter:getSupportedFormats": { req: { inputFormat: string }; res: { formats: string[] } };
+  "converter:getPresets": { req: void; res: { presets: Record<string, { outputFormat: string; options: Record<string, unknown> }> } };
 
   "history:list": { req: void; res: DownloadRecord[] };
   "history:stats": { req: void; res: { totalCompleted: number; totalFailed: number; totalBytesDownloaded: number } };

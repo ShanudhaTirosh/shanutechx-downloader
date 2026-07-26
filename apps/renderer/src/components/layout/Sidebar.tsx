@@ -5,7 +5,7 @@ import { useUiStore, type TabId } from "../../stores/uiStore";
 
 const NAV_ITEMS: { id: TabId; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "downloads", label: "Downloads", icon: Download },
+  { id: "downloads", label: "Direct Downloads", icon: Download },
   { id: "social", label: "Social Grab", icon: Clapperboard },
   { id: "torrents", label: "Torrents", icon: Magnet },
   { id: "converter", label: "Converter", icon: AudioLines },

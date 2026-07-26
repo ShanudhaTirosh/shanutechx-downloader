@@ -73,6 +73,9 @@ export class DownloadJob {
       const meta = await resolveMeta(this.url, this.dispatcher);
       this.filename = meta.filename;
       this.sizeBytes = meta.sizeBytes;
+      
+      // Use actualUrl if provided (for redirected URLs like Google Drive)
+      const downloadUrl = meta.actualUrl || this.url;
 
       const canSegment = meta.acceptsRanges && meta.sizeBytes !== null && meta.sizeBytes > 2 * 1024 * 1024;
       const segmentCount = canSegment ? Math.max(1, Math.min(this.requestedSegmentCount, 32)) : 1;
@@ -87,7 +90,7 @@ export class DownloadJob {
       events.onStatus("downloading");
 
       await Promise.all(
-        this.segments.map((seg) => this.downloadSegment(seg, events, globalBucket, perFileBucket)),
+        this.segments.map((seg) => this.downloadSegment(seg, events, globalBucket, perFileBucket, downloadUrl)),
       );
 
       events.onStatus("merging");
@@ -130,12 +133,12 @@ export class DownloadJob {
   }
 
   private async downloadSegment(
-    seg: SegmentPlan, events: DownloadJobEvents, globalBucket: TokenBucket, perFileBucket: TokenBucket,
+    seg: SegmentPlan, events: DownloadJobEvents, globalBucket: TokenBucket, perFileBucket: TokenBucket, downloadUrl: string,
   ): Promise<void> {
     let attempt = 0;
     for (;;) {
       try {
-        await this.attemptSegmentDownload(seg, events, globalBucket, perFileBucket, attempt > 0);
+        await this.attemptSegmentDownload(seg, events, globalBucket, perFileBucket, attempt > 0, downloadUrl);
         return;
       } catch (err) {
         if (this.abortController.signal.aborted) throw err; // never retry a genuine user cancel
@@ -166,14 +169,14 @@ export class DownloadJob {
   }
 
   private async attemptSegmentDownload(
-    seg: SegmentPlan, events: DownloadJobEvents, globalBucket: TokenBucket, perFileBucket: TokenBucket, isRetry: boolean,
+    seg: SegmentPlan, events: DownloadJobEvents, globalBucket: TokenBucket, perFileBucket: TokenBucket, isRetry: boolean, downloadUrl: string,
   ): Promise<void> {
     const canResumeViaRange = this.segments.length > 1; // only true multi-segment requests carry a Range header at all
     const alreadyOnDisk = canResumeViaRange ? (this.segmentBytesDone[seg.index] ?? 0) : 0;
     const headers: Record<string, string> = {};
     if (canResumeViaRange) headers.range = `bytes=${seg.start + alreadyOnDisk}-${seg.end}`;
 
-    const res = await request(this.url, { method: "GET", headers, signal: this.abortController.signal, dispatcher: this.dispatcher });
+    const res = await request(downloadUrl, { method: "GET", headers, signal: this.abortController.signal, dispatcher: this.dispatcher });
     // Only append when we actually asked the server to resume from a byte
     // offset — a plain whole-file GET retry must truncate and restart
     // cleanly, or it would double-write and corrupt the segment's temp file.

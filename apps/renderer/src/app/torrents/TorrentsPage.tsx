@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Magnet, Loader2 } from "lucide-react";
+import { Magnet, Loader2, Pause, Play, Trash2 } from "lucide-react";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { ProgressRing } from "../../components/ui/ProgressRing";
 import { ipc } from "../../lib/ipc-client";
 import { formatBytes, formatSpeed } from "../../lib/format";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { useToast } from "../../components/ui/Toast";
 import type { TorrentStatus } from "@shanutechx/shared-types";
 
 export function TorrentsPage() {
@@ -13,6 +14,7 @@ export function TorrentsPage() {
   const [adding, setAdding] = useState(false);
   const [torrents, setTorrents] = useState<Record<string, TorrentStatus>>({});
   const { settings, load } = useSettingsStore();
+  const { showToast } = useToast();
 
   useEffect(() => {
     void load();
@@ -34,8 +36,41 @@ export function TorrentsPage() {
       await ipc.invoke("torrents:add", { magnetOrPath: magnet.trim(), saveDir: settings.torrentSavePath || settings.downloadDir });
       setMagnet("");
       await refresh();
+      showToast("Torrent added successfully", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Failed to add torrent", "error");
     } finally {
       setAdding(false);
+    }
+  }
+
+  async function handlePause(infoHash: string) {
+    try {
+      await ipc.invoke("torrents:pause", { infoHash });
+      await refresh();
+      showToast("Torrent paused", "success");
+    } catch (error) {
+      showToast("Failed to pause torrent", "error");
+    }
+  }
+
+  async function handleResume(infoHash: string) {
+    try {
+      await ipc.invoke("torrents:resume", { infoHash });
+      await refresh();
+      showToast("Torrent resumed", "success");
+    } catch (error) {
+      showToast("Failed to resume torrent", "error");
+    }
+  }
+
+  async function handleRemove(infoHash: string) {
+    try {
+      await ipc.invoke("torrents:remove", { infoHash });
+      await refresh();
+      showToast("Torrent removed", "success");
+    } catch (error) {
+      showToast("Failed to remove torrent", "error");
     }
   }
 
@@ -68,7 +103,7 @@ export function TorrentsPage() {
             <div>
               <p className="text-sm text-zinc-400 mb-1">No active torrents</p>
               <p className="text-xs text-zinc-600">
-                Paste a magnet link above to start downloading
+                Add a magnet link or .torrent file to start downloading
               </p>
             </div>
           </div>
@@ -83,6 +118,35 @@ export function TorrentsPage() {
                 <p className="text-xs text-zinc-500 mt-1">
                   {formatBytes(t.totalDownloaded)} / {formatBytes(t.totalSize)} · {formatSpeed(t.downloadRateBps)} ↓ · {t.numPeers} peers · {t.state}
                 </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {t.state === "paused" ? (
+                  <Button
+                    onClick={() => handleResume(t.infoHash)}
+                    size="sm"
+                    variant="secondary"
+                    title="Resume"
+                  >
+                    <Play size={16} />
+                  </Button>
+                ) : t.state === "downloading" || t.state === "seeding" ? (
+                  <Button
+                    onClick={() => handlePause(t.infoHash)}
+                    size="sm"
+                    variant="secondary"
+                    title="Pause"
+                  >
+                    <Pause size={16} />
+                  </Button>
+                ) : null}
+                <Button
+                  onClick={() => handleRemove(t.infoHash)}
+                  size="sm"
+                  variant="secondary"
+                  title="Remove"
+                >
+                  <Trash2 size={16} />
+                </Button>
               </div>
             </div>
           ))}
