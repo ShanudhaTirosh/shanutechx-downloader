@@ -52,9 +52,19 @@ if (isPrimaryInstance) {
     applyOsLevelSettings(settingsStore.get());
     onSettingsChange(applyOsLevelSettings);
 
+    // Initialize engines and register handlers BEFORE creating the window
+    // to avoid race conditions where the renderer tries to invoke handlers
+    // before they're registered
+    queueManager = new QueueManager(() => mainWindow);
+    const socialManager = new SocialManager(() => mainWindow);
+    torrentEngine = new TorrentEngine(() => mainWindow);
+    const converterManager = new ConverterManager(() => mainWindow);
+    registerAllHandlers(queueManager, socialManager, torrentEngine, converterManager);
+
     mainWindow = createMainWindow();
     
-    // Initialize binaries (yt-dlp, ffmpeg, ffprobe) before starting engines
+    // Initialize binaries (yt-dlp, ffmpeg, ffprobe) after window is created
+    // so we can send progress updates
     try {
       log.info("Checking for required binaries...");
       const downloaded = await initializeBinaries((progress) => {
@@ -69,12 +79,6 @@ if (isPrimaryInstance) {
       log.error("Failed to initialize binaries:", error);
       // Continue anyway - app will show error when user tries to use features
     }
-
-    queueManager = new QueueManager(() => mainWindow);
-    const socialManager = new SocialManager(() => mainWindow);
-    torrentEngine = new TorrentEngine(() => mainWindow);
-    const converterManager = new ConverterManager(() => mainWindow);
-    registerAllHandlers(queueManager, socialManager, torrentEngine, converterManager);
 
     // Initialize auto-updater for GitHub releases
     initializeAutoUpdater();
