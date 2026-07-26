@@ -11,7 +11,7 @@ export function TitleBar() {
 
   useEffect(() => {
     // Get initial maximized state
-    ipc.invoke("app:isMaximized").then((result) => setIsMaximized(result.maximized));
+    ipc.invoke("app:isMaximized", undefined).then((result) => setIsMaximized(result.maximized));
 
     // Listen for maximize state changes
     const unsubscribe = ipc.on("window:maximized-change", (data) => {
@@ -22,19 +22,19 @@ export function TitleBar() {
   }, []);
 
   const handleMinimize = () => {
-    ipc.invoke("app:minimize");
+    ipc.invoke("app:minimize", undefined);
   };
 
   const handleMaximize = () => {
     if (isMaximized) {
-      ipc.invoke("app:unmaximize");
+      ipc.invoke("app:unmaximize", undefined);
     } else {
-      ipc.invoke("app:maximize");
+      ipc.invoke("app:maximize", undefined);
     }
   };
 
   const handleClose = () => {
-    ipc.invoke("app:close");
+    ipc.invoke("app:close", undefined);
   };
 
   return (
