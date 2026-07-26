@@ -77,7 +77,12 @@ export function SocialPage() {
   return (
     <div className="max-w-3xl">
       <h1 className="text-xl font-semibold text-zinc-100 mb-1">Social Grab</h1>
-      <p className="text-sm text-zinc-500 mb-6">Paste a link from YouTube, TikTok, Instagram, and 1000+ other sites.</p>
+      <p className="text-sm text-zinc-500 mb-2">
+        Paste a link from YouTube, TikTok, Instagram, Twitter, Pornhub, and 1800+ other sites.
+      </p>
+      <p className="text-xs text-zinc-600 mb-6">
+        ✓ Video platforms · ✓ Social media · ✓ Adult content · ✓ Live streams · All downloads are private and processed locally
+      </p>
 
       <form onSubmit={handleExtract} className="glass-panel flex items-center gap-2 p-2 mb-6">
         <Link2 size={16} className="text-zinc-500 ml-2 shrink-0" />

@@ -9,7 +9,8 @@ A modern, powerful desktop download manager built with Electron, React, and Type
 
 ### 🚀 Multi-Protocol Downloads
 - **HTTP/HTTPS Downloads** - Multi-segment parallel downloading for maximum speed
-- **Social Media Support** - Download from YouTube, TikTok, Instagram, and 1000+ sites via yt-dlp
+- **Social Media Support** - Download from YouTube, TikTok, Instagram, Twitter, Facebook, and 1800+ sites via yt-dlp
+- **Adult Content Support** - Download from Pornhub, Xvideos, and other adult platforms (privacy-focused, all local)
 - **Torrent Support** - Built-in WebTorrent engine for P2P downloads
 - **Smart Resume** - Automatic resume on network errors with exponential backoff
 
@@ -99,9 +100,16 @@ The packaged application will be in `apps/main/dist/`.
 ### Social Media Downloads
 
 1. Go to **Social Grab** tab
-2. Paste a URL from YouTube, TikTok, Instagram, etc.
+2. Paste a URL from supported sites:
+   - **Video Platforms**: YouTube, TikTok, Instagram, Vimeo, Dailymotion
+   - **Social Media**: Twitter/X, Facebook, Reddit
+   - **Adult Content**: Pornhub, Xvideos, and 1000+ other sites
+   - **Live Streaming**: Twitch, YouTube Live
+   - And many more (yt-dlp supports 1800+ sites)
 3. Click **Extract** to see available qualities
 4. Select quality and click **Download**
+
+**Note**: Your app respects your privacy - all downloads happen locally on your machine.
 
 ### Torrents
 
@@ -272,11 +280,13 @@ If auto-updates aren't working:
 
 ---
 
-## � Documentation
+## 📚 Documentation
 
 - **[Setup Guide](docs/SETUP.md)** - Detailed setup and configuration instructions
 - **[Changelog](docs/CHANGELOG.md)** - Version history and release notes
 - **[Improvements](docs/IMPROVEMENTS.md)** - Technical improvements and bug fixes
+- **[Supported Sites](docs/SUPPORTED-SITES.md)** - Complete list of 1800+ supported platforms
+- **[Adult Content Support](docs/ADULT-CONTENT-SUPPORT.md)** - Privacy-focused downloading guide
 
 ---
 
