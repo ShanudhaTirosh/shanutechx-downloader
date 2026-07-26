@@ -1,0 +1,9 @@
+{
+  "name": "@shanutechx/design-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/tokens.ts",
+  "types": "src/tokens.ts",
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "devDependencies": { "typescript": "^5.6.0" }
+}

@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { @apply border-surface-border; }
+  body { @apply antialiased; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-surface-raised rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-surface-raised-hover; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-surface-raised backdrop-blur-xl border border-surface-border rounded-2xl;
+  }
+  .glass-panel-hover {
+    @apply hover:bg-surface-raised-hover hover:border-surface-border-strong transition-colors;
+  }
+  .focus-ring {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base;
+  }
+}

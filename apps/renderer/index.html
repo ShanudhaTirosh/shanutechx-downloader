@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Renderer is sandboxed with no Node access — this CSP is the second
+         layer of defense on top of contextIsolation/sandbox in window.ts.
+         object-src/base-uri/form-action/frame-src are all locked down since
+         this app has no legitimate use for plugins, base-tag redirection,
+         form submission, or embedded frames. -->
+    <meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; connect-src 'self'" />
+    <title>SHANUTECHX Downloader</title>
+  </head>
+  <body class="bg-surface-base text-zinc-100">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

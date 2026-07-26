@@ -1,0 +1,28 @@
+{
+  "name": "shanutechx-downloader",
+  "private": true,
+  "version": "0.1.0",
+  "description": "SHANUTECHX Downloader — modern Electron + React desktop download manager",
+  "scripts": {
+    "dev": "pnpm --parallel --filter ./apps/* dev",
+    "dev:renderer": "pnpm --filter @shanutechx/renderer dev",
+    "dev:main": "pnpm --filter @shanutechx/main dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint apps packages --max-warnings=0",
+    "test": "pnpm -r --if-present test",
+    "check:settings-coverage": "node scripts/check-settings-coverage.mjs",
+    "package": "pnpm build && pnpm --filter @shanutechx/main package"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "eslint": "^9.15.0",
+    "typescript-eslint": "^8.15.0",
+    "eslint-plugin-react-hooks": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.12.0"
+}

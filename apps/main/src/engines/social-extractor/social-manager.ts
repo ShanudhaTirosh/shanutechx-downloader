@@ -1,0 +1,56 @@
+import { randomUUID } from "node:crypto";
+import type { BrowserWindow } from "electron";
+import { extractMediaInfo } from "./extract-info";
+import { SocialDownloadJob } from "./social-download-job";
+import { resolveBinaries } from "./binaries";
+import { downloadsRepo } from "../../db/downloads-repo";
+import { settingsStore } from "../../settings/settings-store";
+import type { MediaFormatOption, MediaInfo } from "@shanutechx/shared-types";
+
+export class SocialManager {
+  private jobs = new Map<string, SocialDownloadJob>();
+  constructor(private getWindow: () => BrowserWindow | null) {}
+
+  async extract(url: string): Promise<MediaInfo> {
+    const { ytDlp } = resolveBinaries();
+    const settings = settingsStore.get();
+    return extractMediaInfo(url, ytDlp, settings.ignoreCertificateErrors);
+  }
+
+  start(url: string, format: MediaFormatOption): { id: string } {
+    const settings = settingsStore.get();
+    const { ytDlp } = resolveBinaries();
+    const id = randomUUID();
+
+    downloadsRepo.insert({ id, url, filename: format.label, sourceType: "social", format: format.id });
+
+    const job = new SocialDownloadJob(
+      id, url, settings.downloadDir, format.ytdlpFormat, ytDlp, settings.ignoreCertificateErrors,
+      settings.subtitleLanguages, settings.autoEmbedThumbnail,
+    );
+    this.jobs.set(id, job);
+
+    job.run({
+      onFilename: (filename) => downloadsRepo.setResolvedMeta(id, filename, null, 1),
+      onProgress: (downloadedBytes, sizeBytes) => {
+        downloadsRepo.updateProgress(id, downloadedBytes, sizeBytes);
+        this.getWindow()?.webContents.send("download:progress", { id, downloadedBytes, totalBytes: sizeBytes, speedBps: 0, etaSec: null });
+      },
+      onStatus: (status, errorMessage) => {
+        if (status === "complete") {
+          downloadsRepo.complete(id, job.filepath, 0, 0);
+        } else {
+          // 'cancelled' is a REAL status here, not remapped to 'failed' the
+          // way the old app's exception-based cancel hack forced it to be.
+          downloadsRepo.updateStatus(id, status, errorMessage ?? null);
+        }
+        this.getWindow()?.webContents.send("download:status", { id, status, errorMessage });
+        if (status !== "downloading") this.jobs.delete(id);
+      },
+    });
+
+    return { id };
+  }
+
+  cancel(id: string): void { this.jobs.get(id)?.cancel(); }
+}
