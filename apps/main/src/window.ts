@@ -6,6 +6,10 @@ const isDev = process.env.NODE_ENV === "development";
 let tray: Tray | null = null;
 
 export function createMainWindow(): BrowserWindow {
+  const iconPath = isDev
+    ? path.join(__dirname, "../../../../build/icon.ico")
+    : path.join(process.resourcesPath, "icon.ico");
+  
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -15,6 +19,7 @@ export function createMainWindow(): BrowserWindow {
     show: false,
     frame: false, // custom title bar, see components/layout/TitleBar.tsx
     titleBarStyle: "hidden",
+    icon: iconPath, // Set window icon
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -73,11 +78,14 @@ export function createMainWindow(): BrowserWindow {
 
 function ensureTray(win: BrowserWindow): void {
   if (tray) return;
-  // A 1x1 transparent fallback keeps this from throwing if a real brand icon
-  // asset isn't present in a given build — the tray still functions, just
-  // without custom art, rather than crashing minimize-to-tray entirely.
-  const icon = nativeImage.createEmpty();
-  tray = new Tray(icon);
+  
+  // Use the application icon for the tray
+  const iconPath = isDev
+    ? path.join(__dirname, "../../../../build/icon.ico")
+    : path.join(process.resourcesPath, "icon.ico");
+  
+  const icon = nativeImage.createFromPath(iconPath);
+  tray = new Tray(icon.resize({ width: 16, height: 16 }));
   tray.setToolTip("SHANUTECHX Downloader");
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Open SHANUTECHX Downloader", click: () => win.show() },
