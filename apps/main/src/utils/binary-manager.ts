@@ -228,7 +228,9 @@ export function getMissingBinaries(): {
 }
 
 /**
- * Download all missing binaries
+ * Download all missing binaries in parallel.
+ * All three binaries (yt-dlp, ffmpeg, ffprobe) download simultaneously —
+ * previously they were sequential which meant 3x the wait time.
  */
 export async function downloadMissingBinaries(onProgress?: ProgressCallback): Promise<void> {
   await ensureBinariesDir();
@@ -236,44 +238,56 @@ export async function downloadMissingBinaries(onProgress?: ProgressCallback): Pr
   const missing = getMissingBinaries();
   const urls = getBinaryUrls();
 
+  const tasks: Promise<void>[] = [];
+
   if (missing.ytdlp) {
-    console.log('Downloading yt-dlp...');
-    await downloadBinary(urls.ytdlp, YTDLP_PATH, "yt-dlp", onProgress);
-    console.log('yt-dlp downloaded successfully');
+    console.log('Queuing yt-dlp download...');
+    tasks.push(
+      downloadBinary(urls.ytdlp, YTDLP_PATH, "yt-dlp", onProgress)
+        .then(() => console.log('yt-dlp downloaded successfully'))
+    );
   }
 
-  // On Windows, ffmpeg and ffprobe come from the same zip
+  // On Windows, ffmpeg and ffprobe come from the same zip — download once.
   if (process.platform === "win32" && (missing.ffmpeg || missing.ffprobe)) {
     if (urls.ffmpeg === urls.ffprobe) {
-      console.log('Downloading ffmpeg essentials (includes ffmpeg and ffprobe)...');
-      // Download once and extract both binaries
-      await downloadAndExtractFFmpegBundle(urls.ffmpeg, onProgress);
-      console.log('ffmpeg and ffprobe downloaded successfully');
+      console.log('Queuing ffmpeg bundle download (includes ffmpeg and ffprobe)...');
+      tasks.push(
+        downloadAndExtractFFmpegBundle(urls.ffmpeg, onProgress)
+          .then(() => console.log('ffmpeg and ffprobe downloaded successfully'))
+      );
     } else {
       if (missing.ffmpeg) {
-        console.log('Downloading ffmpeg...');
-        await downloadBinary(urls.ffmpeg, FFMPEG_PATH, "ffmpeg", onProgress);
-        console.log('ffmpeg downloaded successfully');
+        tasks.push(
+          downloadBinary(urls.ffmpeg, FFMPEG_PATH, "ffmpeg", onProgress)
+            .then(() => console.log('ffmpeg downloaded successfully'))
+        );
       }
       if (missing.ffprobe) {
-        console.log('Downloading ffprobe...');
-        await downloadBinary(urls.ffprobe, FFPROBE_PATH, "ffprobe", onProgress);
-        console.log('ffprobe downloaded successfully');
+        tasks.push(
+          downloadBinary(urls.ffprobe, FFPROBE_PATH, "ffprobe", onProgress)
+            .then(() => console.log('ffprobe downloaded successfully'))
+        );
       }
     }
   } else {
-    // Other platforms download separately
+    // Other platforms — download ffmpeg and ffprobe in parallel too
     if (missing.ffmpeg) {
-      console.log('Downloading ffmpeg...');
-      await downloadBinary(urls.ffmpeg, FFMPEG_PATH, "ffmpeg", onProgress);
-      console.log('ffmpeg downloaded successfully');
+      tasks.push(
+        downloadBinary(urls.ffmpeg, FFMPEG_PATH, "ffmpeg", onProgress)
+          .then(() => console.log('ffmpeg downloaded successfully'))
+      );
     }
     if (missing.ffprobe) {
-      console.log('Downloading ffprobe...');
-      await downloadBinary(urls.ffprobe, FFPROBE_PATH, "ffprobe", onProgress);
-      console.log('ffprobe downloaded successfully');
+      tasks.push(
+        downloadBinary(urls.ffprobe, FFPROBE_PATH, "ffprobe", onProgress)
+          .then(() => console.log('ffprobe downloaded successfully'))
+      );
     }
   }
+
+  // Run all downloads at the same time
+  await Promise.all(tasks);
 }
 
 /**

@@ -30,7 +30,20 @@ jobs:
           version: 9
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        # --ignore-scripts skips the root postinstall to avoid running
+        # electron-rebuild against system Node before we're ready.
+        # We run it explicitly below, targeted at the correct Electron binary.
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Rebuild native modules for Electron
+        # Compiles better-sqlite3, @napi-rs/keyring, and any other native
+        # addons against the exact Electron binary that electron-builder will
+        # package. Without this step the .node files ship compiled for system
+        # Node, causing "missing DLL" / "invalid ELF" errors at runtime.
+        run: pnpm --filter @shanutechx/main exec electron-rebuild -f -w better-sqlite3,@napi-rs/keyring
+        env:
+          npm_config_platform: win32
+          npm_config_arch: x64
 
       - name: Build renderer
         run: pnpm --filter @shanutechx/renderer build
@@ -51,6 +64,7 @@ jobs:
             apps/main/dist/**/*.exe
             apps/main/dist/**/*.yml
             apps/main/dist/**/*.yaml
+            apps/main/dist/**/*.blockmap
 
   release:
     name: Create Release
@@ -80,5 +94,6 @@ jobs:
             artifacts/**/*.exe
             artifacts/**/*.yml
             artifacts/**/*.yaml
+            artifacts/**/*.blockmap
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

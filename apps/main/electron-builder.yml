@@ -12,8 +12,13 @@ extraResources:
     to: renderer/dist
   - from: ../../build/icon.ico
     to: icon.ico
+# Unpack native .node addons outside the asar archive so the OS can load
+# them directly. Without this, Windows can't resolve the VC++ runtime DLLs
+# that better-sqlite3 and @napi-rs/keyring link against.
 asarUnpack:
   - "**/*.node"
+  - "**/node_modules/better-sqlite3/**"
+  - "**/node_modules/@napi-rs/keyring/**"
 win:
   target: [nsis]
   icon: ../../build/icon.ico

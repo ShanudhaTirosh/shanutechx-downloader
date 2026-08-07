@@ -41,17 +41,38 @@ export class SocialManager {
         if (status === "complete") {
           downloadsRepo.complete(id, job.filepath, job.sizeBytes ?? 0, job.avgSpeedBps);
           runPostDownloadActions(job.filepath);
+        } else if (status === "paused") {
+          // 'paused' is a real first-class status for social downloads —
+          // the yt-dlp process was intentionally killed, partial file stays on
+          // disk, and resume() will restart with --continue.
+          downloadsRepo.updateStatus(id, "paused");
         } else {
           // 'cancelled' is a REAL status here, not remapped to 'failed' the
           // way the old app's exception-based cancel hack forced it to be.
           downloadsRepo.updateStatus(id, status, errorMessage ?? null);
         }
         this.getWindow()?.webContents.send("download:status", { id, status, errorMessage });
-        if (status !== "downloading") this.jobs.delete(id);
+        if (status !== "downloading" && status !== "paused") this.jobs.delete(id);
       },
     });
 
     return { id };
+  }
+
+  pause(id: string): void {
+    const job = this.jobs.get(id);
+    if (job) {
+      job.pause();
+      // Status event will be emitted by the job once the yt-dlp process exits.
+    }
+  }
+
+  resume(id: string): void {
+    const job = this.jobs.get(id);
+    if (job) {
+      job.resume();
+      // Status event will be emitted by the job when yt-dlp restarts.
+    }
   }
 
   cancel(id: string): void { this.jobs.get(id)?.cancel(); }

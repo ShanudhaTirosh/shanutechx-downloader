@@ -180,6 +180,9 @@ export interface IpcInvokeMap {
 
   "social:extract": { req: { url: string }; res: MediaInfo };
   "social:download": { req: { url: string; format: MediaFormatOption }; res: { id: string } };
+  "social:pause": { req: { id: string }; res: void };
+  "social:resume": { req: { id: string }; res: void };
+  "social:cancel": { req: { id: string }; res: void };
 
   "torrents:add": { req: { magnetOrPath: string; saveDir: string }; res: { infoHash: string } };
   "torrents:list": { req: void; res: TorrentStatus[] };

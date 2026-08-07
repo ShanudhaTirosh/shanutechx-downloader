@@ -27,11 +27,39 @@ export function DownloadCard({ item }: { item: DownloadRecord }) {
   const isActive = item.status === "downloading" || item.status === "merging";
   const isPaused = item.status === "paused";
   const isDone = item.status === "complete" || item.status === "failed" || item.status === "cancelled";
+  const isSocial = item.sourceType === "social";
 
   async function handleShowInFolder() {
     if (!item.filepath) return;
     const result = await ipc.invoke("app:showInFolder", { filepath: item.filepath });
     if (!result.success) showToast("Couldn't find that file — it may have been moved or deleted", "error");
+  }
+
+  // For social/yt-dlp downloads, pause and resume use the dedicated social
+  // IPC channels (which kill and restart the yt-dlp process with --continue).
+  // For HTTP and torrent downloads, they use the existing queue channels.
+  async function handlePause() {
+    if (isSocial) {
+      await ipc.invoke("social:pause", { id: item.id });
+    } else {
+      await pause(item.id);
+    }
+  }
+
+  async function handleResume() {
+    if (isSocial) {
+      await ipc.invoke("social:resume", { id: item.id });
+    } else {
+      await resume(item.id);
+    }
+  }
+
+  async function handleCancel() {
+    if (isSocial) {
+      await ipc.invoke("social:cancel", { id: item.id });
+    } else {
+      await cancel(item.id);
+    }
   }
 
   return (
@@ -66,13 +94,13 @@ export function DownloadCard({ item }: { item: DownloadRecord }) {
           <IconButton onClick={handleShowInFolder} title="Show in folder"><FolderOpen size={15} /></IconButton>
         )}
         {isActive && (
-          <IconButton onClick={() => pause(item.id)} title="Pause"><Pause size={15} /></IconButton>
+          <IconButton onClick={handlePause} title="Pause"><Pause size={15} /></IconButton>
         )}
         {isPaused && (
-          <IconButton onClick={() => resume(item.id)} title="Resume"><Play size={15} /></IconButton>
+          <IconButton onClick={handleResume} title="Resume"><Play size={15} /></IconButton>
         )}
         {!isDone && (
-          <IconButton onClick={() => cancel(item.id)} title="Cancel" danger><X size={15} /></IconButton>
+          <IconButton onClick={handleCancel} title="Cancel" danger><X size={15} /></IconButton>
         )}
       </div>
     </motion.div>

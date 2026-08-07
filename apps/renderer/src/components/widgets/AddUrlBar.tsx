@@ -1,6 +1,6 @@
-import { useState, type ClipboardEvent } from "react";
+import { useState, type ClipboardEvent, useRef } from "react";
 import { motion } from "framer-motion";
-import { Plus, Link2 } from "lucide-react";
+import { Plus, Link2, Clipboard } from "lucide-react";
 import { Button } from "../ui/Button";
 import { useDownloadsStore } from "../../stores/downloadsStore";
 import { useToast } from "../ui/Toast";
@@ -38,6 +38,7 @@ export function AddUrlBar() {
   const [url, setUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
   const addUrl = useDownloadsStore((s) => s.addUrl);
   const { showToast } = useToast();
   const setActiveTab = useUiStore((s) => s.setActiveTab);
@@ -46,11 +47,23 @@ export function AddUrlBar() {
     setShakeKey((k) => k + 1);
   }
 
+  async function handlePasteButton() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text.trim()) {
+        setUrl(text.trim());
+        inputRef.current?.focus();
+      }
+    } catch {
+      showToast("Could not read clipboard — try pasting manually (Ctrl+V)", "error");
+    }
+  }
+
   // Pasting a list of URLs (one per line — e.g. copied from a spreadsheet or
   // a text file) adds all of them at once instead of dumping the whole
   // blob into the single-line input as unusable text. Single-URL pastes
   // fall through to the browser's normal paste behavior untouched.
-  async function handlePaste(e: ClipboardEvent<HTMLInputElement>) {
+  async function handleMultiUrlPaste(e: ClipboardEvent<HTMLInputElement>) {
     const text = e.clipboardData.getData("text");
     const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     if (lines.length <= 1) return; // normal single-URL paste — let the browser handle it
@@ -149,12 +162,22 @@ export function AddUrlBar() {
     >
       <Link2 size={16} className="text-zinc-500 ml-2 shrink-0" />
       <input
+        ref={inputRef}
         value={url}
         onChange={(e) => setUrl(e.target.value)}
-        onPaste={handlePaste}
+        onPaste={handleMultiUrlPaste as unknown as React.ClipboardEventHandler<HTMLInputElement>}
         placeholder="Paste a direct file URL — or a list of URLs, one per line, to add them all…"
         className="flex-1 bg-transparent outline-none text-sm text-zinc-100 placeholder:text-zinc-600 py-2"
       />
+      {/* Paste button — one-click clipboard read */}
+      <button
+        type="button"
+        onClick={handlePasteButton}
+        title="Paste from clipboard"
+        className="h-8 w-8 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-100 hover:bg-surface-raised-hover transition-colors focus-ring shrink-0"
+      >
+        <Clipboard size={15} />
+      </button>
       <Button type="submit" disabled={!url.trim() || submitting} loading={submitting} size="md">
         {!submitting && <Plus size={16} />} Add
       </Button>

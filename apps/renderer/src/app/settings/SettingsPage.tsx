@@ -12,12 +12,13 @@ import type { ProxyType } from "@shanutechx/shared-types";
 
 export function SettingsPage() {
   const { settings, load, update } = useSettingsStore();
+  const [appVersion, setAppVersion] = useState<string | null>(null);
   const [proxyUser, setProxyUser] = useState("");
   const [proxyPass, setProxyPass] = useState("");
   const [credentialStatus, setCredentialStatus] = useState<string | null>(null);
   const [binariesStatus, setBinariesStatus] = useState<{ ytdlp: boolean; ffmpeg: boolean; ffprobe: boolean } | null>(null);
   const [downloadingBinaries, setDownloadingBinaries] = useState(false);
-  const [binaryProgress, setBinaryProgress] = useState<{ binary: string; percent: number } | null>(null);
+  const [binaryProgress, setBinaryProgress] = useState<Record<string, number>>({});
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<{ version: string; releaseNotes: string } | null>(null);
@@ -28,10 +29,12 @@ export function SettingsPage() {
   useEffect(() => { 
     void load();
     void checkBinaries();
+    // Load real version from main process
+    ipc.invoke("app:getVersion", undefined).then((v) => setAppVersion(v.version)).catch(() => {});
     
-    // Listen for binary download progress
+    // Listen for binary download progress — now shows per-binary progress in parallel
     const unsubBinary = ipc.on("binary:download-progress", (progress) => {
-      setBinaryProgress({ binary: progress.binary, percent: progress.percent });
+      setBinaryProgress((prev) => ({ ...prev, [progress.binary]: progress.percent }));
     });
 
     // Listen for update events
@@ -65,7 +68,7 @@ export function SettingsPage() {
 
   async function handleDownloadBinaries() {
     setDownloadingBinaries(true);
-    setBinaryProgress(null);
+    setBinaryProgress({});
     try {
       const result = await ipc.invoke("app:downloadBinaries", undefined);
       if (result.success) {
@@ -78,7 +81,7 @@ export function SettingsPage() {
       showToast("Error downloading binaries", "error");
     } finally {
       setDownloadingBinaries(false);
-      setBinaryProgress(null);
+      setBinaryProgress({});
     }
   }
 
@@ -91,10 +94,10 @@ export function SettingsPage() {
         setUpdateInfo({ version: result.version, releaseNotes: result.releaseNotes ?? "" });
         showToast(`Update available: v${result.version}`, "success");
       } else {
-        showToast("You're on the latest version!", "info");
+        showToast(`You are already on the latest version (v${appVersion ?? "?"})`, "info");
       }
     } catch {
-      showToast("Failed to check for updates", "error");
+      showToast("Failed to check for updates. Make sure you have an internet connection.", "error");
     } finally {
       setCheckingUpdate(false);
     }
@@ -183,7 +186,11 @@ export function SettingsPage() {
             >
               {!downloadingBinaries && <Download size={16} />}
               {downloadingBinaries
-                ? (binaryProgress ? `Downloading ${binaryProgress.binary}... ${binaryProgress.percent}%` : "Downloading...")
+                ? (Object.keys(binaryProgress).length > 0
+                    ? Object.entries(binaryProgress)
+                        .map(([bin, pct]) => `${bin} ${pct}%`)
+                        .join(" · ")
+                    : "Downloading...")
                 : "Download Missing Binaries"}
             </Button>
           )}
@@ -201,7 +208,7 @@ export function SettingsPage() {
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-zinc-300">Current version: v{settings ? "0.1.0" : "..."}</p>
+              <p className="text-sm text-zinc-300">Current version: v{appVersion ?? "…"}</p>
               {updateAvailable && updateInfo && (
                 <p className="text-xs text-brand-secondary mt-1">
                   Update available: v{updateInfo.version}

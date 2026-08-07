@@ -4,7 +4,7 @@ import { reserveUniqueFilepath } from "../../utils/filename";
 
 export interface SocialDownloadEvents {
   onProgress: (downloadedBytes: number, sizeBytes: number | null) => void;
-  onStatus: (status: "downloading" | "complete" | "failed" | "cancelled", errorMessage?: string) => void;
+  onStatus: (status: "downloading" | "paused" | "complete" | "failed" | "cancelled", errorMessage?: string) => void;
   onFilename: (filename: string) => void;
 }
 
@@ -19,6 +19,14 @@ function unitToBytes(value: number, unit: string): number {
  * One yt-dlp download's lifecycle, driven as a real child process via the
  * native spawn() wrapper (argv array — never a shell string).
  *
+ * Pause/resume is implemented via kill-then-restart: when the user pauses,
+ * the yt-dlp process receives SIGTERM and exits. The partial download file
+ * stays on disk. When the user resumes, a new yt-dlp process starts with
+ * --continue so yt-dlp seeks to the byte offset it already downloaded
+ * and picks up from there. This is the only reliable cross-platform pause
+ * implementation for yt-dlp on Windows (SIGSTOP/SIGCONT are not reliably
+ * supported on Windows).
+ *
  * Cancellation kills the actual child process and resolves as a genuine
  * "cancelled" status — the old app raised an exception from inside yt-dlp's
  * Python progress hook to fake a cancel, which yt-dlp's own error handling
@@ -30,6 +38,7 @@ function unitToBytes(value: number, unit: string): number {
 export class SocialDownloadJob {
   private kill: ((signal?: NodeJS.Signals) => void) | null = null;
   private cancelled = false;
+  private isPaused = false;
   private resolvedFilename = "";
   // Same coalescing pattern as the HTTP engine (download-job.ts) and the
   // converter engine (converter-job.ts). yt-dlp throttles its own progress
@@ -47,6 +56,9 @@ export class SocialDownloadJob {
   private lastKnownDownloadedBytes = 0;
   private lastKnownSizeBytes: number | null = null;
   private startedAt = 0;
+  // Keep a reference to the event callbacks so resume() can restart the
+  // yt-dlp process with the same event wiring.
+  private events: SocialDownloadEvents | null = null;
 
   constructor(
     private id: string,
@@ -61,10 +73,40 @@ export class SocialDownloadJob {
 
   cancel(): void {
     this.cancelled = true;
+    this.isPaused = false;
     this.kill?.("SIGTERM");
   }
 
+  /**
+   * Pause: kill the current yt-dlp process. The partial download file stays
+   * on disk so --continue can resume from where it stopped. The "paused"
+   * status is emitted from runInternal() after the process exits.
+   */
+  pause(): void {
+    if (this.cancelled || this.isPaused) return;
+    this.isPaused = true;
+    this.kill?.("SIGTERM");
+  }
+
+  /**
+   * Resume: re-spawn yt-dlp with --continue so it picks up where it left off.
+   * Only meaningful after pause() has been called.
+   */
+  resume(): void {
+    if (this.cancelled || !this.isPaused) return;
+    this.isPaused = false;
+    if (this.events) {
+      void this.runInternal(this.events, true);
+    }
+  }
+
   async run(events: SocialDownloadEvents): Promise<void> {
+    this.events = events;
+    this.startedAt = Date.now();
+    await this.runInternal(events, false);
+  }
+
+  private async runInternal(events: SocialDownloadEvents, isContinue: boolean): Promise<void> {
     const outputTemplate = path.join(this.saveDir, "%(title).150B [%(id)s].%(ext)s");
     const args = [
       "-f", this.formatSelector,
@@ -73,6 +115,10 @@ export class SocialDownloadJob {
       "--restrict-filenames", "--windows-filenames",
       "-o", outputTemplate,
     ];
+    // Use yt-dlp's built-in resume capability when restarting after a pause.
+    // This causes yt-dlp to check existing partial files and continue from the
+    // last downloaded byte rather than restarting from the beginning.
+    if (isContinue) args.push("--continue");
     if (this.ignoreCertificateErrors) args.push("--no-check-certificate");
     if (this.autoEmbedThumbnail) args.push("--embed-thumbnail");
     if (this.subtitleLanguages.trim()) {
@@ -81,7 +127,7 @@ export class SocialDownloadJob {
     args.push(this.url);
 
     events.onStatus("downloading");
-    this.startedAt = Date.now();
+    if (!isContinue) this.startedAt = Date.now();
 
     const { promise, kill } = runProcess(this.ytDlpPath, args, {
       onStdoutLine: (line) => {
@@ -108,6 +154,11 @@ export class SocialDownloadJob {
 
     try {
       await promise;
+      if (this.isPaused) {
+        // Process was killed cleanly by pause() — not a failure.
+        events.onStatus("paused");
+        return;
+      }
       // Guaranteed final flush, same as the HTTP and converter engines —
       // if the last progress line landed inside the throttle window, the
       // UI shouldn't sit on a stale under-100% number once yt-dlp has
@@ -115,6 +166,12 @@ export class SocialDownloadJob {
       if (this.lastKnownSizeBytes !== null) events.onProgress(this.lastKnownSizeBytes, this.lastKnownSizeBytes);
       events.onStatus("complete");
     } catch (err) {
+      if (this.isPaused) {
+        // SIGTERM from pause() causes a non-zero exit which runProcess wraps
+        // as an Error — but it's a deliberate pause, not a failure.
+        events.onStatus("paused");
+        return;
+      }
       if (this.cancelled) {
         events.onStatus("cancelled");
       } else {

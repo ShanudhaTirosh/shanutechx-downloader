@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Link2, Search, Loader2, Download as DownloadIcon } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Link2, Search, Loader2, Download as DownloadIcon, Clipboard } from "lucide-react";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { useToast } from "../../components/ui/Toast";
@@ -15,6 +15,10 @@ export function SocialPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<MediaInfo | null>(null);
+  // Set of format IDs currently being downloaded — prevents double-clicking
+  // Download from spawning two identical yt-dlp jobs.
+  const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
+  const inputRef = useRef<HTMLInputElement>(null);
   const refresh = useDownloadsStore((s) => s.refresh);
   const { settings, load: loadSettings } = useSettingsStore();
   const setActiveTab = useUiStore((s) => s.setActiveTab);
@@ -25,6 +29,18 @@ export function SocialPage() {
   // Real read-site for defaultVideoQuality — used to highlight the row that
   // matches the user's configured preference, e.g. "1080p", once info loads.
   const preferredHeight = settings ? Number.parseInt(settings.defaultVideoQuality, 10) || null : null;
+
+  async function handlePaste() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text.trim()) {
+        setUrl(text.trim());
+        inputRef.current?.focus();
+      }
+    } catch {
+      showToast("Could not read clipboard — try pasting manually (Ctrl+V)", "error");
+    }
+  }
 
   async function handleExtract(e: React.FormEvent) {
     e.preventDefault();
@@ -52,6 +68,11 @@ export function SocialPage() {
   }
 
   async function handleDownload(format: MediaFormatOption) {
+    // Prevent duplicate downloads — if this format is already being queued,
+    // ignore the click. The button is also visually disabled while in-flight.
+    if (downloadingIds.has(format.id)) return;
+
+    setDownloadingIds((prev) => new Set(prev).add(format.id));
     try {
       await ipc.invoke("social:download", { url: url.trim(), format });
       await refresh();
@@ -71,6 +92,12 @@ export function SocialPage() {
         err instanceof Error ? err.message : "Failed to start download",
         "error"
       );
+    } finally {
+      setDownloadingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(format.id);
+        return next;
+      });
     }
   }
 
@@ -87,11 +114,21 @@ export function SocialPage() {
       <form onSubmit={handleExtract} className="glass-panel flex items-center gap-2 p-2 mb-6">
         <Link2 size={16} className="text-zinc-500 ml-2 shrink-0" />
         <input
+          ref={inputRef}
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="Paste a video/post URL…"
           className="flex-1 bg-transparent outline-none text-sm text-zinc-100 placeholder:text-zinc-600 py-2"
         />
+        {/* Paste button — one-click clipboard read, no need to right-click */}
+        <button
+          type="button"
+          onClick={handlePaste}
+          title="Paste from clipboard"
+          className="h-8 w-8 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-100 hover:bg-surface-raised-hover transition-colors focus-ring shrink-0"
+        >
+          <Clipboard size={15} />
+        </button>
         <Button type="submit" disabled={!url.trim() || loading} size="md">
           {loading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
           {loading ? "Extracting…" : "Extract"}
@@ -115,7 +152,12 @@ export function SocialPage() {
           <div className="flex flex-col gap-2">
             <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">Quality</p>
             {info.availableQualities.length === 0 ? (
-              <QualityRow label="Best available" onDownload={() => handleDownload({ id: "best", label: "Best", ytdlpFormat: "bestvideo+bestaudio/best" })} />
+              <QualityRow
+                label="Best available"
+                formatId="best"
+                downloading={downloadingIds.has("best")}
+                onDownload={() => handleDownload({ id: "best", label: "Best", ytdlpFormat: "bestvideo+bestaudio/best" })}
+              />
             ) : (
               info.availableQualities.map((q) => (
                 <QualityRow
@@ -123,12 +165,26 @@ export function SocialPage() {
                   label={`${q.height}p (${q.ext})`}
                   size={formatBytes(q.filesizeBytes)}
                   preferred={preferredHeight !== null && q.height === preferredHeight}
-                  onDownload={() => handleDownload({ id: q.formatId, label: `${q.height}p`, ytdlpFormat: `${q.formatId}+bestaudio/best` })}
+                  formatId={q.formatId}
+                  downloading={downloadingIds.has(q.formatId)}
+                  onDownload={() => handleDownload({
+                    id: q.formatId,
+                    label: `${q.height}p`,
+                    // FIX: use fallback chain so sites that bundle audio+video
+                    // in a single stream (Hamster, many niche sites) don't fail
+                    // with "requested format not available". The selector tries:
+                    //  1. video format + best separate audio (YouTube-style)
+                    //  2. video format alone if it already has audio embedded
+                    //  3. generic best as last resort
+                    ytdlpFormat: `${q.formatId}+bestaudio/${q.formatId}/best`,
+                  })}
                 />
               ))
             )}
             <QualityRow
               label={`Audio only (${(settings?.defaultAudioFormat ?? "mp3").toUpperCase()})`}
+              formatId="audio"
+              downloading={downloadingIds.has("audio")}
               onDownload={() => handleDownload({ id: "audio", label: "Audio", ytdlpFormat: "bestaudio/best", postprocessor: settings?.defaultAudioFormat ?? "mp3" })}
             />
           </div>
@@ -138,15 +194,26 @@ export function SocialPage() {
   );
 }
 
-function QualityRow({ label, size, onDownload, preferred }: { label: string; size?: string; onDownload: () => void; preferred?: boolean }) {
+function QualityRow({
+  label, size, onDownload, preferred, downloading, formatId,
+}: {
+  label: string;
+  size?: string;
+  onDownload: () => void;
+  preferred?: boolean;
+  downloading?: boolean;
+  formatId: string;
+}) {
+  void formatId; // used by parent for tracking, not rendered
   return (
     <div className={`flex items-center justify-between rounded-xl px-3 py-2 glass-panel-hover ${preferred ? "ring-1 ring-brand-secondary/50" : ""}`}>
       <span className="text-sm text-zinc-200">{label}{preferred && <span className="ml-2 text-[10px] text-brand-secondary uppercase tracking-wide">Preferred</span>}</span>
       <div className="flex items-center gap-3">
         {size && <span className="text-xs text-zinc-500">{size}</span>}
-        <Button size="sm" variant="secondary" onClick={onDownload}><DownloadIcon size={13} /> Download</Button>
+        <Button size="sm" variant="secondary" onClick={onDownload} disabled={downloading} loading={downloading}>
+          {!downloading && <DownloadIcon size={13} />} {downloading ? "Starting…" : "Download"}
+        </Button>
       </div>
     </div>
   );
 }
-
