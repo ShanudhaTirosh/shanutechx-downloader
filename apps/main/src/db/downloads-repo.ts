@@ -1,4 +1,4 @@
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, lte, and, isNotNull } from "drizzle-orm";
 import { getDb } from "./client";
 import { downloads, type DownloadRow } from "./schema";
 import type { DownloadRecord, DownloadStatus, SourceType } from "@shanutechx/shared-types";
@@ -22,13 +22,15 @@ function rowToRecord(row: DownloadRow): DownloadRecord {
     segments: row.segments,
     createdAt: row.createdAt,
     completedAt: row.completedAt,
+    scheduledFor: row.scheduledFor ?? null,
   };
 }
 
 export const downloadsRepo = {
   insert(row: {
     id: string; url: string; filename: string; sourceType: SourceType;
-    platform?: string | null; format?: string | null; quality?: string | null; segments?: number;
+    platform?: string | null; format?: string | null; quality?: string | null;
+    segments?: number; scheduledFor?: string | null;
   }): void {
     getDb().insert(downloads).values({
       id: row.id,
@@ -44,18 +46,14 @@ export const downloadsRepo = {
       quality: row.quality ?? null,
       segments: row.segments ?? 1,
       createdAt: new Date().toISOString(),
+      scheduledFor: row.scheduledFor ?? null,
     }).run();
   },
 
   // Progress ticks land here from both the HTTP and social-extractor engines
-  // — each of those already throttles its own onProgress callback (Phase 1
-  // + this pass), but downloadedBytes/sizeBytes only matter for surviving an
-  // app restart mid-download; the live UI number comes from the IPC
-  // broadcast, not from reading this back. So the DB write itself is
-  // throttled independently, and coarser than the UI feed: better-sqlite3
-  // is a synchronous call on Electron's main thread, so every write here
-  // briefly blocks IPC/UI handling, and there's no benefit to persisting a
-  // resumability checkpoint more often than every couple of seconds.
+  // — each of those already throttles its own onProgress callback, but
+  // downloadedBytes/sizeBytes only matter for surviving an app restart mid-download;
+  // the live UI number comes from the IPC broadcast, not from reading this back.
   _lastProgressWriteAt: new Map<string, number>(),
   updateProgress(id: string, downloadedBytes: number, sizeBytes: number | null): void {
     const now = Date.now();
@@ -72,6 +70,28 @@ export const downloadsRepo = {
 
   setResolvedMeta(id: string, filename: string, sizeBytes: number | null, segments: number): void {
     getDb().update(downloads).set({ filename, sizeBytes, segments }).where(eq(downloads.id, id)).run();
+  },
+
+  /**
+   * Set or clear the scheduled start time for a download.
+   * When scheduledFor is null the download starts immediately.
+   */
+  setScheduledFor(id: string, scheduledFor: string | null): void {
+    getDb().update(downloads).set({ scheduledFor }).where(eq(downloads.id, id)).run();
+  },
+
+  /**
+   * Returns all downloads that are still queued and whose scheduledFor time
+   * has arrived (scheduledFor <= now). Called every minute by the scheduler tick.
+   */
+  listScheduledReady(): DownloadRecord[] {
+    const now = new Date().toISOString();
+    const rows = getDb()
+      .select()
+      .from(downloads)
+      .where(and(eq(downloads.status, "queued"), isNotNull(downloads.scheduledFor), lte(downloads.scheduledFor, now)))
+      .all();
+    return rows.map(rowToRecord);
   },
 
   /**

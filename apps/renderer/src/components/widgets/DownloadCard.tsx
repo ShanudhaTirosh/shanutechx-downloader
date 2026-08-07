@@ -1,5 +1,6 @@
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Pause, Play, X, CheckCircle2, XCircle, Loader2, FolderOpen } from "lucide-react";
+import { Pause, Play, X, CheckCircle2, XCircle, Loader2, FolderOpen, Calendar, Clock } from "lucide-react";
 import clsx from "clsx";
 import type { DownloadRecord } from "@shanutechx/shared-types";
 import { ProgressRing } from "../ui/ProgressRing";
@@ -9,16 +10,36 @@ import { ipc } from "../../lib/ipc-client";
 import { useToast } from "../ui/Toast";
 import { listItem, springs } from "../../lib/motion";
 
-// framer-motion propagates stagger timing to children only when they opt in
-// via named `variants`, so DownloadCard exposes itself as "initial" /
-// "animate" / "exit" rather than taking inline animation props — this lets
-// DownloadsPage's staggerContainer drive the timing when the whole list
-// mounts, while a single card added later still animates in on its own.
-
 const STATUS_LABEL: Record<DownloadRecord["status"], string> = {
   queued: "Queued", resolving: "Resolving…", downloading: "Downloading",
   paused: "Paused", merging: "Merging…", complete: "Complete", failed: "Failed", cancelled: "Cancelled",
 };
+
+/** Human-readable relative countdown: "in 3 h 22 min", "in 45 min", "Starting soon…" */
+function useCountdown(scheduledFor: string | null): string | null {
+  const [label, setLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!scheduledFor) { setLabel(null); return; }
+
+    function update() {
+      const diffMs = new Date(scheduledFor!).getTime() - Date.now();
+      if (diffMs <= 0) { setLabel("Starting soon…"); return; }
+      const totalSec = Math.floor(diffMs / 1000);
+      const hours = Math.floor(totalSec / 3600);
+      const mins = Math.floor((totalSec % 3600) / 60);
+      if (hours > 0) setLabel(`in ${hours} h ${mins} min`);
+      else if (mins > 0) setLabel(`in ${mins} min`);
+      else setLabel("Starting soon…");
+    }
+
+    update();
+    const timer = setInterval(update, 30_000);
+    return () => clearInterval(timer);
+  }, [scheduledFor]);
+
+  return label;
+}
 
 export function DownloadCard({ item }: { item: DownloadRecord }) {
   const { pause, resume, cancel } = useDownloadsStore();
@@ -28,6 +49,8 @@ export function DownloadCard({ item }: { item: DownloadRecord }) {
   const isPaused = item.status === "paused";
   const isDone = item.status === "complete" || item.status === "failed" || item.status === "cancelled";
   const isSocial = item.sourceType === "social";
+  const isScheduled = item.status === "queued" && !!item.scheduledFor;
+  const countdown = useCountdown(item.scheduledFor ?? null);
 
   async function handleShowInFolder() {
     if (!item.filepath) return;
@@ -35,31 +58,24 @@ export function DownloadCard({ item }: { item: DownloadRecord }) {
     if (!result.success) showToast("Couldn't find that file — it may have been moved or deleted", "error");
   }
 
-  // For social/yt-dlp downloads, pause and resume use the dedicated social
-  // IPC channels (which kill and restart the yt-dlp process with --continue).
-  // For HTTP and torrent downloads, they use the existing queue channels.
   async function handlePause() {
-    if (isSocial) {
-      await ipc.invoke("social:pause", { id: item.id });
-    } else {
-      await pause(item.id);
-    }
+    if (isSocial) { await ipc.invoke("social:pause", { id: item.id }); }
+    else { await pause(item.id); }
   }
 
   async function handleResume() {
-    if (isSocial) {
-      await ipc.invoke("social:resume", { id: item.id });
-    } else {
-      await resume(item.id);
-    }
+    if (isSocial) { await ipc.invoke("social:resume", { id: item.id }); }
+    else { await resume(item.id); }
   }
 
   async function handleCancel() {
-    if (isSocial) {
-      await ipc.invoke("social:cancel", { id: item.id });
-    } else {
-      await cancel(item.id);
-    }
+    if (isSocial) { await ipc.invoke("social:cancel", { id: item.id }); }
+    else { await cancel(item.id); }
+  }
+
+  /** Clear schedule and start the download now */
+  async function handleStartNow() {
+    await ipc.invoke("downloads:schedule", { id: item.id, scheduledFor: null });
   }
 
   return (
@@ -70,36 +86,71 @@ export function DownloadCard({ item }: { item: DownloadRecord }) {
       animate="animate"
       exit="exit"
       whileHover={{ y: -2 }}
-      className="glass-panel glass-panel-hover flex items-center gap-4 p-4"
+      className={clsx(
+        "glass-panel glass-panel-hover flex items-center gap-4 p-4",
+        isScheduled && "border-brand-secondary/40",
+      )}
     >
       <motion.div
-        // A quick "arrival" pop the instant a download finishes — small,
-        // physical confirmation instead of just a colour/icon swap.
         animate={item.status === "complete" ? { scale: [1, 1.12, 1] } : undefined}
         transition={springs.bouncy}
       >
         <ProgressRing percent={item.status === "merging" ? null : percent} />
       </motion.div>
+
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-zinc-100 truncate">{item.filename || item.url}</p>
-        <div className="flex items-center gap-2 mt-1 text-xs text-zinc-500">
-          <StatusBadge status={item.status} />
-          <span>{formatBytes(item.downloadedBytes)} / {formatBytes(item.sizeBytes)}</span>
-          {isActive && <span>· {formatSpeed(item.speedBps)}</span>}
-          {item.errorMessage && <span className="text-status-danger truncate">· {item.errorMessage}</span>}
+        <div className="flex items-center gap-2 mt-1 text-xs text-zinc-500 flex-wrap">
+          {isScheduled ? (
+            <>
+              <span className="inline-flex items-center gap-1 text-brand-secondary">
+                <Clock size={11} /> Scheduled
+              </span>
+              {countdown && <span>· {countdown}</span>}
+              {item.scheduledFor && (
+                <span className="text-zinc-600">
+                  · {new Date(item.scheduledFor).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              <StatusBadge status={item.status} />
+              <span>{formatBytes(item.downloadedBytes)} / {formatBytes(item.sizeBytes)}</span>
+              {isActive && <span>· {formatSpeed(item.speedBps)}</span>}
+              {item.errorMessage && <span className="text-status-danger truncate">· {item.errorMessage}</span>}
+            </>
+          )}
         </div>
       </div>
+
       <div className="flex items-center gap-1 shrink-0">
         {item.status === "complete" && item.filepath && (
           <IconButton onClick={handleShowInFolder} title="Show in folder"><FolderOpen size={15} /></IconButton>
         )}
+        {/* Scheduled: show "Start Now" and Cancel */}
+        {isScheduled && (
+          <>
+            <IconButton onClick={handleStartNow} title="Start now">
+              <Play size={15} />
+            </IconButton>
+            <IconButton onClick={handleCancel} title="Cancel" danger><X size={15} /></IconButton>
+          </>
+        )}
+        {/* Active: pause */}
         {isActive && (
           <IconButton onClick={handlePause} title="Pause"><Pause size={15} /></IconButton>
         )}
-        {isPaused && (
+        {/* Paused (not scheduled): resume */}
+        {isPaused && !isScheduled && (
           <IconButton onClick={handleResume} title="Resume"><Play size={15} /></IconButton>
         )}
-        {!isDone && (
+        {/* Queued (not scheduled): cancel */}
+        {!isDone && !isScheduled && item.status === "queued" && (
+          <IconButton onClick={handleCancel} title="Cancel" danger><X size={15} /></IconButton>
+        )}
+        {/* Active: cancel too */}
+        {(isActive || isPaused) && (
           <IconButton onClick={handleCancel} title="Cancel" danger><X size={15} /></IconButton>
         )}
       </div>

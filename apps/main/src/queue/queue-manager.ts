@@ -82,14 +82,31 @@ export class QueueManager {
     const now = new Date();
     this.globalBucket.setRate(computeEffectiveGlobalKBps(settings, now) * 1024);
 
+    // Promote any scheduled downloads whose time has arrived — applies to
+    // BOTH HTTP and social downloads stored in the DB with a scheduledFor
+    // timestamp. Social downloads that need yt-dlp are launched via their
+    // stored format in downloadsRepo.get(), but we only handle HTTP here;
+    // social scheduled launches are delegated to SocialManager.
+    const readyScheduled = downloadsRepo.listScheduledReady();
+    for (const rec of readyScheduled) {
+      if (rec.sourceType === "http") {
+        // Clear the schedule time and start immediately
+        downloadsRepo.setScheduledFor(rec.id, null);
+        if (this.active.size < settings.maxSimultaneousDownloads && isDownloadingAllowedNow(settings, now)) {
+          this.launch(rec.id, rec.url, settings.downloadDir, settings.segmentCount, settings.maxSpeedPerFileKBps);
+        } else {
+          this.queued.push(rec.id);
+        }
+      }
+      // Social/torrent scheduled items: the scheduled_for column was cleared
+      // by their own managers (social-manager.ts) which also listen to this tick.
+    }
+
     const allowedNow = isDownloadingAllowedNow(settings, now);
     if (allowedNow === this.lastAllowedNow) return;
     this.lastAllowedNow = allowedNow;
 
     if (!allowedNow) {
-      // Window just closed — pause every currently-active transfer and
-      // remember which ones so only those get auto-resumed later, not
-      // anything the user pauses manually in the meantime.
       for (const [id, entry] of this.active) {
         entry.job.pause();
         downloadsRepo.updateStatus(id, "paused");
@@ -97,8 +114,6 @@ export class QueueManager {
         this.autoPausedIds.add(id);
       }
     } else {
-      // Window just opened — resume what the schedule paused, then let
-      // promoteNextQueued() start anything still waiting in the queue.
       for (const id of this.autoPausedIds) {
         this.active.get(id)?.job.resume();
         downloadsRepo.updateStatus(id, "downloading");
@@ -121,19 +136,11 @@ export class QueueManager {
   start(url: string, saveDirOverride?: string, allowDuplicate?: boolean): { id: string } {
     if (!allowDuplicate) {
       const existing = downloadsRepo.findActiveOrCompleteByUrl(url);
-      if (existing) {
-        // Deliberately not a generic Error — see the parsed-prefix contract
-        // documented on IpcInvokeMap["downloads:start"] in shared-types.
-        // The renderer pattern-matches this to offer "add anyway?" instead
-        // of showing it as a failure.
-        throw new Error(`DUPLICATE_URL:${existing.id}`);
-      }
+      if (existing) throw new Error(`DUPLICATE_URL:${existing.id}`);
     }
-
     const settings = settingsStore.get();
     const id = randomUUID();
     downloadsRepo.insert({ id, url, filename: url, sourceType: "http", segments: settings.segmentCount });
-
     void this.resolveSaveDir(settings, saveDirOverride).then((saveDir) => {
       if (this.active.size < settings.maxSimultaneousDownloads && isDownloadingAllowedNow(settings, new Date())) {
         this.launch(id, url, saveDir, settings.segmentCount, settings.maxSpeedPerFileKBps);
@@ -143,6 +150,38 @@ export class QueueManager {
       }
     });
     return { id };
+  }
+
+  /**
+   * Add an HTTP download scheduled for a future time. The download stays
+   * queued in the DB until the scheduler tick promotes it.
+   */
+  scheduleNew(url: string, scheduledFor: string, allowDuplicate?: boolean): { id: string } {
+    if (!allowDuplicate) {
+      const existing = downloadsRepo.findActiveOrCompleteByUrl(url);
+      if (existing) throw new Error(`DUPLICATE_URL:${existing.id}`);
+    }
+    const settings = settingsStore.get();
+    const id = randomUUID();
+    downloadsRepo.insert({ id, url, filename: url, sourceType: "http", segments: settings.segmentCount, scheduledFor });
+    return { id };
+  }
+
+  /** Update the scheduled start time on an existing queued download. Passing null starts it immediately. */
+  setSchedule(id: string, scheduledFor: string | null): void {
+    downloadsRepo.setScheduledFor(id, scheduledFor);
+    if (scheduledFor === null) {
+      // Start immediately
+      const rec = downloadsRepo.get(id);
+      const settings = settingsStore.get();
+      if (rec && rec.status === "queued" && !this.queued.includes(id)) {
+        if (this.active.size < settings.maxSimultaneousDownloads && isDownloadingAllowedNow(settings, new Date())) {
+          this.launch(id, rec.url, settings.downloadDir, settings.segmentCount, settings.maxSpeedPerFileKBps);
+        } else {
+          this.queued.push(id);
+        }
+      }
+    }
   }
 
   private async resolveSaveDir(settings: ReturnType<typeof settingsStore.get>, override?: string): Promise<string> {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Link2, Search, Loader2, Download as DownloadIcon, Clipboard } from "lucide-react";
+import { Link2, Search, Loader2, Download as DownloadIcon, Clipboard, Calendar } from "lucide-react";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { useToast } from "../../components/ui/Toast";
@@ -9,6 +9,7 @@ import type { MediaInfo, MediaFormatOption } from "@shanutechx/shared-types";
 import { useDownloadsStore } from "../../stores/downloadsStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useUiStore } from "../../stores/uiStore";
+import { ScheduleModal } from "../../components/widgets/ScheduleModal";
 
 export function SocialPage() {
   const [url, setUrl] = useState("");
@@ -18,6 +19,8 @@ export function SocialPage() {
   // Set of format IDs currently being downloaded — prevents double-clicking
   // Download from spawning two identical yt-dlp jobs.
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
+  // Format currently being scheduled (opens the modal)
+  const [schedulingFormat, setSchedulingFormat] = useState<MediaFormatOption | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const refresh = useDownloadsStore((s) => s.refresh);
   const { settings, load: loadSettings } = useSettingsStore();
@@ -51,9 +54,9 @@ export function SocialPage() {
       setInfo(result);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Unknown error";
-      
-      // Provide specific error messages based on error type
-      if (errorMsg.includes("Unsupported URL")) {
+      if (errorMsg.includes("Sign in to confirm") || errorMsg.includes("bot")) {
+        setError("YouTube requires sign-in confirmation. Go to Settings → Social & media → select your browser under 'Pass cookies from browser', then try again.");
+      } else if (errorMsg.includes("Unsupported URL")) {
         setError("This platform isn't supported. Try YouTube, TikTok, Instagram, or other major sites.");
       } else if (errorMsg.includes("network") || errorMsg.includes("timeout")) {
         setError("Network error. Check your connection and try again.");
@@ -68,41 +71,49 @@ export function SocialPage() {
   }
 
   async function handleDownload(format: MediaFormatOption) {
-    // Prevent duplicate downloads — if this format is already being queued,
-    // ignore the click. The button is also visually disabled while in-flight.
     if (downloadingIds.has(format.id)) return;
-
     setDownloadingIds((prev) => new Set(prev).add(format.id));
     try {
       await ipc.invoke("social:download", { url: url.trim(), format });
       await refresh();
-      
       showToast(
-        `Started downloading "${info?.title || 'media'}" in ${format.label}`,
-        "success",
-        4000
+        `Started downloading "${info?.title || "media"}" in ${format.label}`,
+        "success", 4000,
       );
-      
-      // Auto-navigate to downloads page after a brief delay
-      setTimeout(() => {
-        setActiveTab("downloads");
-      }, 1500);
+      setTimeout(() => setActiveTab("downloads"), 1500);
     } catch (err) {
-      showToast(
-        err instanceof Error ? err.message : "Failed to start download",
-        "error"
-      );
+      showToast(err instanceof Error ? err.message : "Failed to start download", "error");
     } finally {
-      setDownloadingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(format.id);
-        return next;
-      });
+      setDownloadingIds((prev) => { const next = new Set(prev); next.delete(format.id); return next; });
+    }
+  }
+
+  async function handleSchedule(format: MediaFormatOption, scheduledFor: string) {
+    setSchedulingFormat(null);
+    try {
+      await ipc.invoke("social:scheduleNew", { url: url.trim(), format, scheduledFor });
+      await refresh();
+      const when = new Date(scheduledFor).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+      showToast(
+        `Scheduled "${info?.title || "media"}" (${format.label}) for ${when}`,
+        "success", 6000,
+      );
+      setActiveTab("downloads");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to schedule", "error");
     }
   }
 
   return (
     <div className="max-w-3xl">
+      {/* Schedule Modal */}
+      <ScheduleModal
+        open={schedulingFormat !== null}
+        title={schedulingFormat ? `Schedule — ${schedulingFormat.label}` : "Schedule Download"}
+        onConfirm={(scheduledFor) => schedulingFormat && handleSchedule(schedulingFormat, scheduledFor)}
+        onCancel={() => setSchedulingFormat(null)}
+      />
+
       <h1 className="text-xl font-semibold text-zinc-100 mb-1">Social Grab</h1>
       <p className="text-sm text-zinc-500 mb-2">
         Paste a link from YouTube, TikTok, Instagram, Twitter, Pornhub, and 1800+ other sites.
@@ -120,7 +131,7 @@ export function SocialPage() {
           placeholder="Paste a video/post URL…"
           className="flex-1 bg-transparent outline-none text-sm text-zinc-100 placeholder:text-zinc-600 py-2"
         />
-        {/* Paste button — one-click clipboard read, no need to right-click */}
+        {/* Paste button */}
         <button
           type="button"
           onClick={handlePaste}
@@ -157,36 +168,42 @@ export function SocialPage() {
                 formatId="best"
                 downloading={downloadingIds.has("best")}
                 onDownload={() => handleDownload({ id: "best", label: "Best", ytdlpFormat: "bestvideo+bestaudio/best" })}
+                onSchedule={() => setSchedulingFormat({ id: "best", label: "Best", ytdlpFormat: "bestvideo+bestaudio/best" })}
               />
             ) : (
-              info.availableQualities.map((q) => (
-                <QualityRow
-                  key={q.formatId}
-                  label={`${q.height}p (${q.ext})`}
-                  size={formatBytes(q.filesizeBytes)}
-                  preferred={preferredHeight !== null && q.height === preferredHeight}
-                  formatId={q.formatId}
-                  downloading={downloadingIds.has(q.formatId)}
-                  onDownload={() => handleDownload({
-                    id: q.formatId,
-                    label: `${q.height}p`,
-                    // FIX: use fallback chain so sites that bundle audio+video
-                    // in a single stream (Hamster, many niche sites) don't fail
-                    // with "requested format not available". The selector tries:
-                    //  1. video format + best separate audio (YouTube-style)
-                    //  2. video format alone if it already has audio embedded
-                    //  3. generic best as last resort
-                    ytdlpFormat: `${q.formatId}+bestaudio/${q.formatId}/best`,
-                  })}
-                />
-              ))
+              info.availableQualities.map((q) => {
+                const format: MediaFormatOption = {
+                  id: q.formatId,
+                  label: `${q.height}p`,
+                  ytdlpFormat: `${q.formatId}+bestaudio/${q.formatId}/best`,
+                };
+                return (
+                  <QualityRow
+                    key={q.formatId}
+                    label={`${q.height}p (${q.ext})`}
+                    size={formatBytes(q.filesizeBytes)}
+                    preferred={preferredHeight !== null && q.height === preferredHeight}
+                    formatId={q.formatId}
+                    downloading={downloadingIds.has(q.formatId)}
+                    onDownload={() => handleDownload(format)}
+                    onSchedule={() => setSchedulingFormat(format)}
+                  />
+                );
+              })
             )}
-            <QualityRow
-              label={`Audio only (${(settings?.defaultAudioFormat ?? "mp3").toUpperCase()})`}
-              formatId="audio"
-              downloading={downloadingIds.has("audio")}
-              onDownload={() => handleDownload({ id: "audio", label: "Audio", ytdlpFormat: "bestaudio/best", postprocessor: settings?.defaultAudioFormat ?? "mp3" })}
-            />
+            {/* Audio only row */}
+            {(() => {
+              const audioFormat: MediaFormatOption = { id: "audio", label: "Audio", ytdlpFormat: "bestaudio/best", postprocessor: settings?.defaultAudioFormat ?? "mp3" };
+              return (
+                <QualityRow
+                  label={`Audio only (${(settings?.defaultAudioFormat ?? "mp3").toUpperCase()})`}
+                  formatId="audio"
+                  downloading={downloadingIds.has("audio")}
+                  onDownload={() => handleDownload(audioFormat)}
+                  onSchedule={() => setSchedulingFormat(audioFormat)}
+                />
+              );
+            })()}
           </div>
         </Card>
       )}
@@ -195,21 +212,34 @@ export function SocialPage() {
 }
 
 function QualityRow({
-  label, size, onDownload, preferred, downloading, formatId,
+  label, size, onDownload, onSchedule, preferred, downloading, formatId,
 }: {
   label: string;
   size?: string;
   onDownload: () => void;
+  onSchedule: () => void;
   preferred?: boolean;
   downloading?: boolean;
   formatId: string;
 }) {
-  void formatId; // used by parent for tracking, not rendered
+  void formatId;
   return (
     <div className={`flex items-center justify-between rounded-xl px-3 py-2 glass-panel-hover ${preferred ? "ring-1 ring-brand-secondary/50" : ""}`}>
-      <span className="text-sm text-zinc-200">{label}{preferred && <span className="ml-2 text-[10px] text-brand-secondary uppercase tracking-wide">Preferred</span>}</span>
-      <div className="flex items-center gap-3">
+      <span className="text-sm text-zinc-200">
+        {label}
+        {preferred && <span className="ml-2 text-[10px] text-brand-secondary uppercase tracking-wide">Preferred</span>}
+      </span>
+      <div className="flex items-center gap-2">
         {size && <span className="text-xs text-zinc-500">{size}</span>}
+        {/* Schedule button */}
+        <button
+          type="button"
+          onClick={onSchedule}
+          title="Schedule for later"
+          className="h-7 w-7 flex items-center justify-center rounded-lg text-zinc-500 hover:text-brand-secondary hover:bg-surface-raised-hover transition-colors focus-ring shrink-0"
+        >
+          <Calendar size={13} />
+        </button>
         <Button size="sm" variant="secondary" onClick={onDownload} disabled={downloading} loading={downloading}>
           {!downloading && <DownloadIcon size={13} />} {downloading ? "Starting…" : "Download"}
         </Button>

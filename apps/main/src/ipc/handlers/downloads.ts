@@ -7,4 +7,8 @@ export function registerDownloadHandlers(queue: QueueManager): void {
   registerHandler("downloads:resume", (p) => { queue.resume(p.id); });
   registerHandler("downloads:cancel", (p) => { queue.cancel(p.id); });
   registerHandler("downloads:list", () => queue.list());
+  // Scheduler — add a new download that starts at a specific time
+  registerHandler("downloads:scheduleNew", (p) => queue.scheduleNew(p.url, p.scheduledFor, p.allowDuplicate));
+  // Reschedule or clear the schedule on an existing queued download
+  registerHandler("downloads:schedule", (p) => { queue.setSchedule(p.id, p.scheduledFor); });
 }

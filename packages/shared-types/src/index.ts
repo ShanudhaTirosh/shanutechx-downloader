@@ -44,6 +44,8 @@ export interface DownloadRecord {
   segments: number;
   createdAt: string;
   completedAt: string | null;
+  /** ISO datetime string — null means "start immediately". When set, the download stays queued until this time. */
+  scheduledFor: string | null;
 }
 
 export interface MediaFormatOption {
@@ -178,6 +180,12 @@ export interface IpcInvokeMap {
   "downloads:resume": { req: { id: string }; res: void };
   "downloads:cancel": { req: { id: string }; res: void };
   "downloads:list": { req: void; res: DownloadRecord[] };
+  /** Set or clear a scheduled start time on an existing download. Pass scheduledFor: null to start immediately. */
+  "downloads:schedule": { req: { id: string; scheduledFor: string | null }; res: void };
+  /** Add a new download that is pre-scheduled. Returns the download id. */
+  "downloads:scheduleNew": { req: { url: string; scheduledFor: string; allowDuplicate?: boolean }; res: { id: string } };
+  /** Add a new social download that is pre-scheduled. */
+  "social:scheduleNew": { req: { url: string; format: import("./index").MediaFormatOption; scheduledFor: string }; res: { id: string } };
 
   "settings:get": { req: void; res: AppSettings };
   /** Returns the settings as ACTUALLY applied — never a blind echo of the request */

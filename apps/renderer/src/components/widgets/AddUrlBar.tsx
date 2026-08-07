@@ -1,11 +1,13 @@
 import { useState, type ClipboardEvent, useRef } from "react";
 import { motion } from "framer-motion";
-import { Plus, Link2, Clipboard } from "lucide-react";
+import { Plus, Link2, Clipboard, Calendar } from "lucide-react";
 import { Button } from "../ui/Button";
 import { useDownloadsStore } from "../../stores/downloadsStore";
 import { useToast } from "../ui/Toast";
 import { useUiStore } from "../../stores/uiStore";
 import { shake, shakeKeyframes } from "../../lib/motion";
+import { ScheduleModal } from "./ScheduleModal";
+import { ipc } from "../../lib/ipc-client";
 
 // Common video/social media domains that should use Social Grab instead
 const SOCIAL_MEDIA_DOMAINS = [
@@ -38,8 +40,10 @@ export function AddUrlBar() {
   const [url, setUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const addUrl = useDownloadsStore((s) => s.addUrl);
+  const refresh = useDownloadsStore((s) => s.refresh);
   const { showToast } = useToast();
   const setActiveTab = useUiStore((s) => s.setActiveTab);
 
@@ -152,35 +156,87 @@ export function AddUrlBar() {
     setSubmitting(false);
   }
 
+  async function handleSchedule(scheduledFor: string) {
+    setScheduleOpen(false);
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    if (isSocialMediaUrl(trimmed)) {
+      showToast("Use Social Grab to schedule video/social platform downloads.", "error", 5000);
+      return;
+    }
+    try {
+      await ipc.invoke("downloads:scheduleNew", { url: trimmed, scheduledFor });
+      await refresh();
+      setUrl("");
+      const when = new Date(scheduledFor).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+      showToast(`Scheduled for ${when}`, "success", 5000);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to schedule";
+      const dup = /^DUPLICATE_URL:/.exec(message);
+      if (dup) {
+        const proceed = confirm("You've already downloaded this URL. Schedule another copy?");
+        if (proceed) {
+          await ipc.invoke("downloads:scheduleNew", { url: trimmed, scheduledFor, allowDuplicate: true });
+          await refresh();
+          setUrl("");
+          const when = new Date(scheduledFor).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+          showToast(`Scheduled for ${when}`, "success", 5000);
+        }
+        return;
+      }
+      showToast(message, "error");
+    }
+  }
+
   return (
-    <motion.form
-      onSubmit={handleSubmit}
-      key={shakeKey}
-      animate={shakeKey > 0 ? { x: shakeKeyframes } : undefined}
-      transition={shake}
-      className="glass-panel flex items-center gap-2 p-2 mb-6"
-    >
-      <Link2 size={16} className="text-zinc-500 ml-2 shrink-0" />
-      <input
-        ref={inputRef}
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        onPaste={handleMultiUrlPaste as unknown as React.ClipboardEventHandler<HTMLInputElement>}
-        placeholder="Paste a direct file URL — or a list of URLs, one per line, to add them all…"
-        className="flex-1 bg-transparent outline-none text-sm text-zinc-100 placeholder:text-zinc-600 py-2"
+    <>
+      <ScheduleModal
+        open={scheduleOpen}
+        title="Schedule Download"
+        onConfirm={handleSchedule}
+        onCancel={() => setScheduleOpen(false)}
       />
-      {/* Paste button — one-click clipboard read */}
-      <button
-        type="button"
-        onClick={handlePasteButton}
-        title="Paste from clipboard"
-        className="h-8 w-8 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-100 hover:bg-surface-raised-hover transition-colors focus-ring shrink-0"
+      <motion.form
+        onSubmit={handleSubmit}
+        key={shakeKey}
+        animate={shakeKey > 0 ? { x: shakeKeyframes } : undefined}
+        transition={shake}
+        className="glass-panel flex items-center gap-2 p-2 mb-6"
       >
-        <Clipboard size={15} />
-      </button>
-      <Button type="submit" disabled={!url.trim() || submitting} loading={submitting} size="md">
-        {!submitting && <Plus size={16} />} Add
-      </Button>
-    </motion.form>
+        <Link2 size={16} className="text-zinc-500 ml-2 shrink-0" />
+        <input
+          ref={inputRef}
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onPaste={handleMultiUrlPaste as unknown as React.ClipboardEventHandler<HTMLInputElement>}
+          placeholder="Paste a direct file URL — or a list of URLs, one per line, to add them all…"
+          className="flex-1 bg-transparent outline-none text-sm text-zinc-100 placeholder:text-zinc-600 py-2"
+        />
+        {/* Paste button */}
+        <button
+          type="button"
+          onClick={handlePasteButton}
+          title="Paste from clipboard"
+          className="h-8 w-8 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-100 hover:bg-surface-raised-hover transition-colors focus-ring shrink-0"
+        >
+          <Clipboard size={15} />
+        </button>
+        {/* Schedule button — opens datetime picker */}
+        <button
+          type="button"
+          onClick={() => {
+            if (!url.trim()) { showToast("Paste a URL first, then click Schedule.", "error"); return; }
+            setScheduleOpen(true);
+          }}
+          title="Schedule download for later"
+          className="h-8 w-8 flex items-center justify-center rounded-lg text-zinc-500 hover:text-brand-secondary hover:bg-surface-raised-hover transition-colors focus-ring shrink-0"
+        >
+          <Calendar size={15} />
+        </button>
+        <Button type="submit" disabled={!url.trim() || submitting} loading={submitting} size="md">
+          {!submitting && <Plus size={16} />} Add
+        </Button>
+      </motion.form>
+    </>
   );
 }

@@ -33,6 +33,15 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `;
 
+// Idempotent migrations — ALTER TABLE IF NOT EXISTS isn't supported by SQLite
+// so we use try/catch: a "duplicate column name" error means the column already
+// exists, which is the desired outcome.
+const MIGRATIONS_SQL: string[] = [
+  // v2: per-download scheduler
+  `ALTER TABLE downloads ADD COLUMN scheduled_for TEXT`,
+];
+
+
 let dbInstance: BetterSQLite3Database<typeof schema> | null = null;
 let sqliteInstance: Database.Database | null = null;
 
@@ -65,6 +74,10 @@ export function getDb(): BetterSQLite3Database<typeof schema> {
   sqliteInstance.pragma("synchronous = NORMAL");
   sqliteInstance.pragma("foreign_keys = ON");
   sqliteInstance.exec(SCHEMA_SQL);
+  // Run idempotent migrations — safe to re-run on every startup.
+  for (const sql of MIGRATIONS_SQL) {
+    try { sqliteInstance.exec(sql); } catch { /* column already exists — that's fine */ }
+  }
 
   dbInstance = drizzle(sqliteInstance, { schema });
   return dbInstance;

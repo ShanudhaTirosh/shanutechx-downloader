@@ -10,7 +10,29 @@ import type { MediaFormatOption, MediaInfo } from "@shanutechx/shared-types";
 
 export class SocialManager {
   private jobs = new Map<string, SocialDownloadJob>();
-  constructor(private getWindow: () => BrowserWindow | null) {}
+  // Scheduled social jobs: id → { url, format } stored in memory for fast lookup
+  private scheduledFormats = new Map<string, MediaFormatOption>();
+  private scheduleTimer: NodeJS.Timeout;
+
+  constructor(private getWindow: () => BrowserWindow | null) {
+    // Check every 30 seconds for social downloads whose time has arrived.
+    // Uses a different interval from QueueManager (which is every 60s) so
+    // there's no single point of contention — the two managers are independent.
+    this.scheduleTimer = setInterval(() => this.runScheduleTick(), 30_000);
+    this.scheduleTimer.unref?.();
+  }
+
+  private runScheduleTick(): void {
+    const ready = downloadsRepo.listScheduledReady();
+    for (const rec of ready) {
+      if (rec.sourceType !== "social") continue;
+      const format = this.scheduledFormats.get(rec.id);
+      if (!format) continue; // format info was lost (e.g. app restarted) — skip
+      downloadsRepo.setScheduledFor(rec.id, null); // clear schedule → status stays 'queued'
+      this.scheduledFormats.delete(rec.id);
+      this._launch(rec.id, rec.url, format);
+    }
+  }
 
   async extract(url: string): Promise<MediaInfo> {
     const { ytDlp } = resolveBinaries();
@@ -19,11 +41,29 @@ export class SocialManager {
   }
 
   start(url: string, format: MediaFormatOption): { id: string } {
+    const id = randomUUID();
+    downloadsRepo.insert({ id, url, filename: format.label, sourceType: "social", format: format.id });
+    this._launch(id, url, format);
+    return { id };
+  }
+
+  /**
+   * Add a social download that stays queued until scheduledFor arrives.
+   * The format is kept in memory (this.scheduledFormats) so the scheduler
+   * tick can start it. If the app is restarted before the time arrives,
+   * the scheduled entry will remain in the DB as 'queued' — the user can
+   * cancel or start it manually from the downloads list.
+   */
+  scheduleNew(url: string, format: MediaFormatOption, scheduledFor: string): { id: string } {
+    const id = randomUUID();
+    downloadsRepo.insert({ id, url, filename: format.label, sourceType: "social", format: format.id, scheduledFor });
+    this.scheduledFormats.set(id, format);
+    return { id };
+  }
+
+  private _launch(id: string, url: string, format: MediaFormatOption): void {
     const settings = settingsStore.get();
     const { ytDlp } = resolveBinaries();
-    const id = randomUUID();
-
-    downloadsRepo.insert({ id, url, filename: format.label, sourceType: "social", format: format.id });
 
     const job = new SocialDownloadJob(
       id, url, settings.downloadDir, format.ytdlpFormat, ytDlp, settings.ignoreCertificateErrors,
@@ -55,8 +95,6 @@ export class SocialManager {
         if (status !== "downloading" && status !== "paused") this.jobs.delete(id);
       },
     });
-
-    return { id };
   }
 
   pause(id: string): void {
@@ -75,5 +113,20 @@ export class SocialManager {
     }
   }
 
-  cancel(id: string): void { this.jobs.get(id)?.cancel(); }
+  cancel(id: string): void {
+    // If it's still in the scheduled-but-not-started state, remove from
+    // the in-memory map and cancel the DB row.
+    if (this.scheduledFormats.has(id)) {
+      this.scheduledFormats.delete(id);
+      downloadsRepo.updateStatus(id, "cancelled");
+      this.getWindow()?.webContents.send("download:status", { id, status: "cancelled" });
+      return;
+    }
+    this.jobs.get(id)?.cancel();
+  }
+
+  destroy(): void {
+    clearInterval(this.scheduleTimer);
+    for (const job of this.jobs.values()) job.cancel();
+  }
 }

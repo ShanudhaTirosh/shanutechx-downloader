@@ -23,6 +23,7 @@ export const downloads = sqliteTable("downloads", {
   segments: integer("segments").notNull().default(1),
   createdAt: text("created_at").notNull(),
   completedAt: text("completed_at"),
+  scheduledFor: text("scheduled_for"), // ISO datetime — null = start immediately
 });
 
 export const settings = sqliteTable("settings", {
