@@ -31,6 +31,22 @@ export class SocialDownloadJob {
   private kill: ((signal?: NodeJS.Signals) => void) | null = null;
   private cancelled = false;
   private resolvedFilename = "";
+  // Same coalescing pattern as the HTTP engine (download-job.ts) and the
+  // converter engine (converter-job.ts). yt-dlp throttles its own progress
+  // line output somewhat, but that's an internal implementation detail of
+  // yt-dlp's progress-bar renderer, not a documented contract this app can
+  // rely on staying true across yt-dlp versions/formats — coalescing here
+  // too means the IPC-flooding fix doesn't quietly regress on a yt-dlp
+  // update.
+  private static readonly PROGRESS_EMIT_INTERVAL_MS = 120;
+  private lastProgressEmitAt = 0;
+  // Tracked independently of the throttle above (updated on every matched
+  // line, not just emitted ones) so the final `complete` status always has
+  // an accurate size/duration to report — see the BUG FIX note on
+  // `sizeBytes`/`downloadedBytes` below.
+  private lastKnownDownloadedBytes = 0;
+  private lastKnownSizeBytes: number | null = null;
+  private startedAt = 0;
 
   constructor(
     private id: string,
@@ -65,6 +81,7 @@ export class SocialDownloadJob {
     args.push(this.url);
 
     events.onStatus("downloading");
+    this.startedAt = Date.now();
 
     const { promise, kill } = runProcess(this.ytDlpPath, args, {
       onStdoutLine: (line) => {
@@ -77,7 +94,13 @@ export class SocialDownloadJob {
         if (progressMatch?.[1] && progressMatch[2] && progressMatch[3]) {
           const percent = Number(progressMatch[1]);
           const totalBytes = unitToBytes(Number(progressMatch[2]), progressMatch[3]);
-          events.onProgress(Math.round((percent / 100) * totalBytes), totalBytes);
+          this.lastKnownDownloadedBytes = Math.round((percent / 100) * totalBytes);
+          this.lastKnownSizeBytes = totalBytes;
+
+          const now = Date.now();
+          if (now - this.lastProgressEmitAt < SocialDownloadJob.PROGRESS_EMIT_INTERVAL_MS) return;
+          this.lastProgressEmitAt = now;
+          events.onProgress(this.lastKnownDownloadedBytes, totalBytes);
         }
       },
     });
@@ -85,6 +108,11 @@ export class SocialDownloadJob {
 
     try {
       await promise;
+      // Guaranteed final flush, same as the HTTP and converter engines —
+      // if the last progress line landed inside the throttle window, the
+      // UI shouldn't sit on a stale under-100% number once yt-dlp has
+      // actually finished.
+      if (this.lastKnownSizeBytes !== null) events.onProgress(this.lastKnownSizeBytes, this.lastKnownSizeBytes);
       events.onStatus("complete");
     } catch (err) {
       if (this.cancelled) {
@@ -97,6 +125,24 @@ export class SocialDownloadJob {
 
   get filepath(): string {
     return this.resolvedFilename ? path.join(this.saveDir, this.resolvedFilename) : "";
+  }
+
+  /**
+   * BUG FIX: social-manager.ts used to call `downloadsRepo.complete(id,
+   * filepath, 0, 0)` — hardcoded zeros — so every finished social/yt-dlp
+   * download showed 0 bytes and 0 avg speed in History, regardless of the
+   * actual file. yt-dlp's `--newline` progress lines are the only source of
+   * size/timing info available (no upfront Content-Length the way the HTTP
+   * engine has one), so these report the last value parsed from them —
+   * accurate for the vast majority of downloads, occasionally slightly off
+   * for the rare file that finishes between the last progress line and
+   * process exit, which real byte-accuracy would need querying the actual
+   * file on disk rather than parsing yt-dlp's own display output for.
+   */
+  get sizeBytes(): number | null { return this.lastKnownSizeBytes; }
+  get avgSpeedBps(): number {
+    const elapsedSec = (Date.now() - this.startedAt) / 1000;
+    return elapsedSec > 0 && this.lastKnownSizeBytes ? this.lastKnownSizeBytes / elapsedSec : 0;
   }
 
   static async reserveDestination(saveDir: string, suggestedName: string): Promise<string> {

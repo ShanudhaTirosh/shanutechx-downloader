@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { Download, RefreshCw, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Download, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "../../components/ui/Card";
 import { Toggle } from "../../components/ui/Toggle";
 import { Button } from "../../components/ui/Button";
 import { useToast } from "../../components/ui/Toast";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { ipc } from "../../lib/ipc-client";
+import { listItem, springs, staggerContainer } from "../../lib/motion";
 import type { ProxyType } from "@shanutechx/shared-types";
 
 export function SettingsPage() {
@@ -72,7 +74,7 @@ export function SettingsPage() {
       } else {
         showToast("Failed to download binaries", "error");
       }
-    } catch (error) {
+    } catch {
       showToast("Error downloading binaries", "error");
     } finally {
       setDownloadingBinaries(false);
@@ -91,7 +93,7 @@ export function SettingsPage() {
       } else {
         showToast("You're on the latest version!", "info");
       }
-    } catch (error) {
+    } catch {
       showToast("Failed to check for updates", "error");
     } finally {
       setCheckingUpdate(false);
@@ -102,7 +104,7 @@ export function SettingsPage() {
     setDownloadingUpdate(true);
     try {
       await ipc.invoke("app:downloadUpdate", undefined);
-    } catch (error) {
+    } catch {
       showToast("Failed to download update", "error");
       setDownloadingUpdate(false);
     }
@@ -121,7 +123,7 @@ export function SettingsPage() {
   const allBinariesPresent = binariesStatus && !binariesStatus.ytdlp && !binariesStatus.ffmpeg && !binariesStatus.ffprobe;
 
   return (
-    <div className="max-w-2xl flex flex-col gap-5">
+    <motion.div variants={staggerContainer} initial="initial" animate="animate" className="max-w-2xl flex flex-col gap-5">
       <div>
         <h1 className="text-xl font-semibold text-zinc-100 mb-1">Settings</h1>
         <p className="text-sm text-zinc-500">
@@ -129,21 +131,38 @@ export function SettingsPage() {
         </p>
       </div>
 
+      <motion.div variants={listItem}>
       <Card>
         <CardHeader><CardTitle>System Binaries</CardTitle></CardHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <span className="text-sm text-zinc-300">Required binaries status</span>
-              {allBinariesPresent ? (
-                <div className="flex items-center gap-2 text-status-success text-xs">
-                  <CheckCircle2 size={14} /> All installed
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-status-warning text-xs">
-                  <AlertCircle size={14} /> Missing binaries
-                </div>
-              )}
+              <AnimatePresence mode="wait">
+                {allBinariesPresent ? (
+                  <motion.div
+                    key="ok"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={springs.snappy}
+                    className="flex items-center gap-2 text-status-success text-xs"
+                  >
+                    <CheckCircle2 size={14} /> All installed
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="missing"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={springs.snappy}
+                    className="flex items-center gap-2 text-status-warning text-xs"
+                  >
+                    <AlertCircle size={14} /> Missing binaries
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
             {binariesStatus && !allBinariesPresent && (
               <div className="text-xs text-zinc-500 space-y-1">
@@ -155,22 +174,17 @@ export function SettingsPage() {
           </div>
           
           {!allBinariesPresent && (
-            <Button 
-              onClick={handleDownloadBinaries} 
+            <Button
+              onClick={handleDownloadBinaries}
               disabled={downloadingBinaries}
+              loading={downloadingBinaries}
               variant="secondary"
               className="self-start"
             >
-              {downloadingBinaries ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  {binaryProgress ? `Downloading ${binaryProgress.binary}... ${binaryProgress.percent}%` : "Downloading..."}
-                </>
-              ) : (
-                <>
-                  <Download size={16} /> Download Missing Binaries
-                </>
-              )}
+              {!downloadingBinaries && <Download size={16} />}
+              {downloadingBinaries
+                ? (binaryProgress ? `Downloading ${binaryProgress.binary}... ${binaryProgress.percent}%` : "Downloading...")
+                : "Download Missing Binaries"}
             </Button>
           )}
 
@@ -179,7 +193,9 @@ export function SettingsPage() {
           </p>
         </div>
       </Card>
+      </motion.div>
 
+      <motion.div variants={listItem}>
       <Card>
         <CardHeader><CardTitle>App Updates</CardTitle></CardHeader>
         <div className="flex flex-col gap-4">
@@ -192,58 +208,76 @@ export function SettingsPage() {
                 </p>
               )}
             </div>
-            <Button 
-              onClick={handleCheckForUpdates} 
+            <Button
+              onClick={handleCheckForUpdates}
               disabled={checkingUpdate}
+              loading={checkingUpdate}
               size="sm"
               variant="secondary"
             >
-              {checkingUpdate ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <RefreshCw size={14} />
-              )}
+              {!checkingUpdate && <RefreshCw size={14} />}
               Check for Updates
             </Button>
           </div>
 
-          {updateAvailable && updateInfo && !downloadingUpdate && updateProgress === 0 && (
-            <div className="bg-brand-secondary/10 border border-brand-secondary/30 rounded-lg p-3">
-              <p className="text-sm text-zinc-100 font-medium mb-2">
-                Version {updateInfo.version} is available
-              </p>
-              {updateInfo.releaseNotes && (
-                <p className="text-xs text-zinc-400 mb-3 whitespace-pre-wrap">
-                  {updateInfo.releaseNotes.slice(0, 200)}...
-                </p>
-              )}
-              <Button onClick={handleDownloadUpdate} size="sm">
-                <Download size={14} /> Download & Install Update
-              </Button>
-            </div>
-          )}
-
-          {downloadingUpdate && (
-            <div className="flex items-center gap-3">
-              <Loader2 size={16} className="animate-spin text-brand-secondary" />
-              <div className="flex-1">
-                <p className="text-xs text-zinc-300">Downloading update... {Math.round(updateProgress)}%</p>
-                <div className="mt-2 h-1.5 bg-surface-raised rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-brand-gradient transition-all duration-300"
-                    style={{ width: `${updateProgress}%` }}
-                  />
+          <AnimatePresence>
+            {updateAvailable && updateInfo && !downloadingUpdate && updateProgress === 0 && (
+              <motion.div
+                key="update-banner"
+                initial={{ opacity: 0, y: -6, height: 0 }}
+                animate={{ opacity: 1, y: 0, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={springs.gentle}
+                className="overflow-hidden"
+              >
+                <div className="bg-brand-secondary/10 border border-brand-secondary/30 rounded-lg p-3">
+                  <p className="text-sm text-zinc-100 font-medium mb-2">
+                    Version {updateInfo.version} is available
+                  </p>
+                  {updateInfo.releaseNotes && (
+                    <p className="text-xs text-zinc-400 mb-3 whitespace-pre-wrap">
+                      {updateInfo.releaseNotes.slice(0, 200)}...
+                    </p>
+                  )}
+                  <Button onClick={handleDownloadUpdate} size="sm">
+                    <Download size={14} /> Download & Install Update
+                  </Button>
                 </div>
-              </div>
-            </div>
-          )}
+              </motion.div>
+            )}
+
+            {downloadingUpdate && (
+              <motion.div
+                key="update-progress"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={springs.gentle}
+                className="flex items-center gap-3 overflow-hidden"
+              >
+                <RefreshCw size={16} className="animate-spin text-brand-secondary shrink-0" />
+                <div className="flex-1">
+                  <p className="text-xs text-zinc-300">Downloading update... {Math.round(updateProgress)}%</p>
+                  <div className="mt-2 h-1.5 bg-surface-raised rounded-full overflow-hidden">
+                    <motion.div
+                      className="h-full bg-brand-gradient"
+                      animate={{ width: `${updateProgress}%` }}
+                      transition={springs.firm}
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <p className="text-xs text-zinc-600">
             Updates are pulled from GitHub releases. The app will restart to complete installation.
           </p>
         </div>
       </Card>
+      </motion.div>
 
+      <motion.div variants={listItem}>
       <Card>
         <CardHeader><CardTitle>Downloads</CardTitle></CardHeader>
         <div className="flex flex-col gap-4">
@@ -259,9 +293,52 @@ export function SettingsPage() {
             onChange={(v) => update({ segmentCount: v })}
             min={1} max={32}
           />
+          <Toggle
+            label="Open containing folder automatically when a download finishes"
+            checked={settings.autoOpenFolderOnComplete}
+            onChange={(v) => update({ autoOpenFolderOnComplete: v })}
+          />
+
+          <div className="border-t border-surface-border/50 -mx-4 my-1" />
+
+          <Toggle
+            label="Only download during a scheduled window each day"
+            checked={settings.downloadScheduleEnabled}
+            onChange={(v) => update({ downloadScheduleEnabled: v })}
+          />
+          <AnimatePresence initial={false}>
+            {settings.downloadScheduleEnabled && (
+              <motion.div
+                key="download-schedule-fields"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={springs.firm}
+                className="overflow-hidden"
+              >
+                <div className="grid grid-cols-2 gap-3">
+                  <NumberField
+                    label="From hour (0–23, local time)"
+                    value={settings.downloadScheduleStartHour}
+                    onChange={(v) => update({ downloadScheduleStartHour: v })}
+                    min={0} max={23}
+                  />
+                  <NumberField
+                    label="To hour (0–23, local time)"
+                    value={settings.downloadScheduleEndHour}
+                    onChange={(v) => update({ downloadScheduleEndHour: v })}
+                    min={0} max={23}
+                    hint={`Downloads only run from ${String(settings.downloadScheduleStartHour).padStart(2, "0")}:00 to ${String(settings.downloadScheduleEndHour).padStart(2, "0")}:00. Outside that window, active transfers pause and queued ones wait — both resume automatically, no restart needed.`}
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </Card>
+      </motion.div>
 
+      <motion.div variants={listItem}>
       <Card>
         <CardHeader><CardTitle>Speed limits</CardTitle></CardHeader>
         <div className="flex flex-col gap-4">
@@ -278,9 +355,53 @@ export function SettingsPage() {
             onChange={(v) => update({ maxSpeedPerFileKBps: v })}
             min={0} max={1_000_000}
           />
+
+          <div className="border-t border-surface-border/50 -mx-4 my-1" />
+
+          <Toggle
+            label="Different limit on a schedule (e.g. faster overnight)"
+            checked={settings.bandwidthScheduleEnabled}
+            onChange={(v) => update({ bandwidthScheduleEnabled: v })}
+          />
+          <AnimatePresence initial={false}>
+            {settings.bandwidthScheduleEnabled && (
+              <motion.div
+                key="bandwidth-schedule-fields"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={springs.firm}
+                className="overflow-hidden flex flex-col gap-4"
+              >
+                <div className="grid grid-cols-2 gap-3">
+                  <NumberField
+                    label="From hour (0–23, local time)"
+                    value={settings.bandwidthScheduleStartHour}
+                    onChange={(v) => update({ bandwidthScheduleStartHour: v })}
+                    min={0} max={23}
+                  />
+                  <NumberField
+                    label="To hour (0–23, local time)"
+                    value={settings.bandwidthScheduleEndHour}
+                    onChange={(v) => update({ bandwidthScheduleEndHour: v })}
+                    min={0} max={23}
+                  />
+                </div>
+                <NumberField
+                  label="Speed limit during that window (KB/s, 0 = unlimited)"
+                  value={settings.bandwidthScheduleOffPeakKBps}
+                  onChange={(v) => update({ bandwidthScheduleOffPeakKBps: v })}
+                  min={0} max={1_000_000}
+                  hint={`Applied instead of the global limit above, every day from ${String(settings.bandwidthScheduleStartHour).padStart(2, "0")}:00 to ${String(settings.bandwidthScheduleEndHour).padStart(2, "0")}:00. Re-checked every minute by the download queue — no restart needed, and it also takes effect mid-download.`}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </Card>
+      </motion.div>
 
+      <motion.div variants={listItem}>
       <Card>
         <CardHeader><CardTitle>Proxy</CardTitle></CardHeader>
         <div className="flex flex-col gap-4">
@@ -296,42 +417,53 @@ export function SettingsPage() {
               <option value="socks5">SOCKS5</option>
             </select>
           </label>
-          {settings.proxyType !== "none" && (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <NumberField label="Port" value={settings.proxyPort} onChange={(v) => update({ proxyPort: v })} min={0} max={65535} />
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-sm text-zinc-300">Host</span>
-                  <input
-                    value={settings.proxyHost}
-                    onChange={(e) => update({ proxyHost: e.target.value })}
-                    placeholder="proxy.example.com"
-                    className="bg-surface-raised border border-surface-border rounded-lg px-3 py-2 text-sm text-zinc-100 focus-ring"
-                  />
-                </label>
-              </div>
-              <div className="flex items-end gap-2">
-                <label className="flex flex-col gap-1.5 flex-1">
-                  <span className="text-sm text-zinc-300">Username (optional)</span>
-                  <input value={proxyUser} onChange={(e) => setProxyUser(e.target.value)} className="bg-surface-raised border border-surface-border rounded-lg px-3 py-2 text-sm text-zinc-100 focus-ring" />
-                </label>
-                <label className="flex flex-col gap-1.5 flex-1">
-                  <span className="text-sm text-zinc-300">Password</span>
-                  <input type="password" value={proxyPass} onChange={(e) => setProxyPass(e.target.value)} className="bg-surface-raised border border-surface-border rounded-lg px-3 py-2 text-sm text-zinc-100 focus-ring" />
-                </label>
-                <Button size="md" variant="secondary" onClick={handleSaveCredentials}>Save</Button>
-              </div>
-              <p className="text-xs text-zinc-600 -mt-2">
-                Credentials are stored in your OS keychain, never in the app's settings database — the old app
-                stored proxy passwords in plaintext SQLite; this one never does.
-                {settings.proxyHasCredentials ? " (Credentials currently saved.)" : ""}
-                {credentialStatus ? ` ${credentialStatus}` : ""}
-              </p>
-            </>
-          )}
+          <AnimatePresence initial={false}>
+            {settings.proxyType !== "none" && (
+              <motion.div
+                key="proxy-fields"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={springs.firm}
+                className="overflow-hidden flex flex-col gap-4"
+              >
+                <div className="grid grid-cols-2 gap-3">
+                  <NumberField label="Port" value={settings.proxyPort} onChange={(v) => update({ proxyPort: v })} min={0} max={65535} />
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-sm text-zinc-300">Host</span>
+                    <input
+                      value={settings.proxyHost}
+                      onChange={(e) => update({ proxyHost: e.target.value })}
+                      placeholder="proxy.example.com"
+                      className="bg-surface-raised border border-surface-border rounded-lg px-3 py-2 text-sm text-zinc-100 focus-ring"
+                    />
+                  </label>
+                </div>
+                <div className="flex items-end gap-2">
+                  <label className="flex flex-col gap-1.5 flex-1">
+                    <span className="text-sm text-zinc-300">Username (optional)</span>
+                    <input value={proxyUser} onChange={(e) => setProxyUser(e.target.value)} className="bg-surface-raised border border-surface-border rounded-lg px-3 py-2 text-sm text-zinc-100 focus-ring" />
+                  </label>
+                  <label className="flex flex-col gap-1.5 flex-1">
+                    <span className="text-sm text-zinc-300">Password</span>
+                    <input type="password" value={proxyPass} onChange={(e) => setProxyPass(e.target.value)} className="bg-surface-raised border border-surface-border rounded-lg px-3 py-2 text-sm text-zinc-100 focus-ring" />
+                  </label>
+                  <Button size="md" variant="secondary" onClick={handleSaveCredentials}>Save</Button>
+                </div>
+                <p className="text-xs text-zinc-600 -mt-2">
+                  Credentials are stored in your OS keychain, never in the app's settings database — the old app
+                  stored proxy passwords in plaintext SQLite; this one never does.
+                  {settings.proxyHasCredentials ? " (Credentials currently saved.)" : ""}
+                  {credentialStatus ? ` ${credentialStatus}` : ""}
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </Card>
+      </motion.div>
 
+      <motion.div variants={listItem}>
       <Card>
         <CardHeader><CardTitle>Social & media</CardTitle></CardHeader>
         <div className="flex flex-col gap-4">
@@ -345,7 +477,8 @@ export function SettingsPage() {
           </p>
         </div>
       </Card>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 

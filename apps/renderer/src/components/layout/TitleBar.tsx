@@ -1,6 +1,8 @@
-import { Minus, Square, X, Maximize2, Minimize2 } from "lucide-react";
+import { Minus, Square, X, Minimize2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import { ipc } from "../../lib/ipc-client";
+import { springs } from "../../lib/motion";
 
 /**
  * Custom title bar for the frameless BrowserWindow (see apps/main/src/window.ts).
@@ -47,27 +49,33 @@ export function TitleBar() {
         <span className="text-xs font-semibold tracking-wide text-zinc-300">SHANUTECHX Downloader</span>
       </div>
       <div className="flex items-center gap-1" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
-        <button
+        <motion.button
           onClick={handleMinimize}
+          whileTap={{ scale: 0.9 }}
+          transition={springs.snappy}
           className="h-7 w-9 flex items-center justify-center rounded-md text-zinc-400 hover:bg-surface-raised-hover hover:text-zinc-100 focus-ring transition-colors"
           title="Minimize"
         >
           <Minus size={13} />
-        </button>
-        <button
+        </motion.button>
+        <motion.button
           onClick={handleMaximize}
+          whileTap={{ scale: 0.9 }}
+          transition={springs.snappy}
           className="h-7 w-9 flex items-center justify-center rounded-md text-zinc-400 hover:bg-surface-raised-hover hover:text-zinc-100 focus-ring transition-colors"
           title={isMaximized ? "Restore" : "Maximize"}
         >
           {isMaximized ? <Minimize2 size={13} /> : <Square size={13} />}
-        </button>
-        <button
+        </motion.button>
+        <motion.button
           onClick={handleClose}
+          whileTap={{ scale: 0.9 }}
+          transition={springs.snappy}
           className="h-7 w-9 flex items-center justify-center rounded-md text-zinc-400 hover:bg-red-600 hover:text-white focus-ring transition-colors"
           title="Close"
         >
           <X size={13} />
-        </button>
+        </motion.button>
       </div>
     </div>
   );

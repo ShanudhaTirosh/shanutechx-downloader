@@ -33,6 +33,14 @@ const DURATION_RE = /Duration:\s*(\d+):(\d+):(\d+\.\d+)/;
 export class ConverterJob {
   private killFn: ((signal?: NodeJS.Signals) => void) | null = null;
   private stallTimer: NodeJS.Timeout | null = null;
+  // Same flooding risk as the HTTP download engine (Phase 1 fix): ffmpeg's
+  // `-progress` output emits a full key=value block roughly once per frame,
+  // which for high-fps footage converting faster than real time can be
+  // dozens of onProgress calls per second straight into IPC. Coalesce the
+  // same way, with a guaranteed final emit on completion (already handled
+  // by the unconditional `onProgress(100)` after the process exits).
+  private static readonly PROGRESS_EMIT_INTERVAL_MS = 120;
+  private lastProgressEmitAt = 0;
 
   cancel(): void { this.killFn?.("SIGTERM"); }
 
@@ -64,6 +72,9 @@ export class ConverterJob {
         const timeMatch = TIME_US_RE.exec(line); // "N/A" lines simply won't match — no NaN risk
         if (timeMatch?.[1] && totalDurationMs) {
           const currentMs = Number(timeMatch[1]) / 1000; // microseconds -> ms
+          const now = Date.now();
+          if (now - this.lastProgressEmitAt < ConverterJob.PROGRESS_EMIT_INTERVAL_MS) return;
+          this.lastProgressEmitAt = now;
           events.onProgress(Math.min(99, (currentMs / totalDurationMs) * 100));
         }
       },

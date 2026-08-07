@@ -93,6 +93,32 @@ export interface AppSettings {
   /** Real per-file limiter, KB/s, 0 = unlimited. Divided across active segments internally. */
   maxSpeedPerFileKBps: number;
 
+  /**
+   * Time-of-day override for the global speed limit — e.g. "cap me during
+   * the day, but let it run faster overnight". When enabled, the effective
+   * global limit becomes `bandwidthScheduleOffPeakKBps` (not
+   * `maxTotalSpeedKBps`) during the [start, end) window each day; outside
+   * the window, `maxTotalSpeedKBps` applies as normal. The window wraps
+   * past midnight when end <= start (e.g. 22 → 6 means 10pm–6am).
+   * Read by queue-manager.ts's schedule tick.
+   */
+  bandwidthScheduleEnabled: boolean;
+  bandwidthScheduleStartHour: number; // 0-23, local time
+  bandwidthScheduleEndHour: number; // 0-23, local time
+  bandwidthScheduleOffPeakKBps: number; // 0 = unlimited
+
+  /**
+   * Only run downloads during a window each day (e.g. "only download
+   * 1am-6am" to stay off a metered/shared connection during the day).
+   * Outside the window, active transfers are auto-paused and queued ones
+   * stay queued; both auto-resume when the window reopens. Read by
+   * queue-manager.ts's schedule tick — same window-wrapping rule as the
+   * bandwidth schedule above.
+   */
+  downloadScheduleEnabled: boolean;
+  downloadScheduleStartHour: number; // 0-23, local time
+  downloadScheduleEndHour: number; // 0-23, local time
+
   proxyType: ProxyType;
   proxyHost: string;
   proxyPort: number;
@@ -115,6 +141,9 @@ export interface AppSettings {
 
   minimizeToTray: boolean;
   theme: "dark"; // light mode reserved for a future release
+
+  /** Read by download-complete-actions.ts, called from both queue-manager.ts (HTTP) and social-manager.ts (yt-dlp) on a "complete" status. */
+  autoOpenFolderOnComplete: boolean;
 }
 
 // ── IPC contract ──────────────────────────────────────────────────────────────
@@ -123,9 +152,18 @@ export interface DownloadStartPayload {
   url: string;
   saveDir?: string;
   segmentCount?: number;
+  /** Skip the duplicate-URL check (used for confirmed re-adds and batch/multi-URL paste). */
+  allowDuplicate?: boolean;
 }
 
 export interface IpcInvokeMap {
+  /**
+   * Resolves normally with a new id. If the URL matches an existing
+   * non-terminal-failed download and `allowDuplicate` wasn't set, rejects
+   * with an Error whose message is exactly `DUPLICATE_URL:<existingId>` —
+   * callers pattern-match that prefix to offer "add anyway?" rather than
+   * showing it as a generic failure.
+   */
   "downloads:start": { req: DownloadStartPayload; res: { id: string } };
   "downloads:pause": { req: { id: string }; res: void };
   "downloads:resume": { req: { id: string }; res: void };
@@ -188,6 +226,8 @@ export interface IpcInvokeMap {
   "app:downloadBinaries": { req: void; res: { success: boolean } };
   "app:checkForUpdates": { req: void; res: { updateAvailable: boolean; version?: string; releaseNotes?: string } };
   "app:downloadUpdate": { req: void; res: void };
+  /** Reveals the file in the OS file manager (Explorer/Finder/etc), selected. Silently no-ops if the path no longer exists. */
+  "app:showInFolder": { req: { filepath: string }; res: { success: boolean } };
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeMap;

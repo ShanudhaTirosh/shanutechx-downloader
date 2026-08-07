@@ -1,12 +1,22 @@
-import { forwardRef, type ButtonHTMLAttributes } from "react";
+import { forwardRef, type ReactNode } from "react";
+import { motion, type HTMLMotionProps } from "framer-motion";
 import clsx from "clsx";
+import { Loader2 } from "lucide-react";
+import { springs } from "../../lib/motion";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+// Built directly on framer-motion's own button prop type (rather than
+// React's ButtonHTMLAttributes) so there's no overlap to reconcile between
+// native DOM handlers (onDrag, onAnimationStart, ...) and framer-motion's
+// gesture/animation props of the same name.
+interface ButtonProps extends Omit<HTMLMotionProps<"button">, "children"> {
   variant?: Variant;
   size?: Size;
+  /** Shows a spinner in place of the leading icon and disables the button — for async actions (add URL, start convert, etc). */
+  loading?: boolean;
+  children?: ReactNode;
 }
 
 const variantClasses: Record<Variant, string> = {
@@ -23,17 +33,24 @@ const sizeClasses: Record<Size, string> = {
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "primary", size = "md", ...props }, ref) => (
-    <button
+  ({ className, variant = "primary", size = "md", loading, disabled, children, ...props }, ref) => (
+    <motion.button
       ref={ref}
+      disabled={disabled || loading}
+      whileHover={disabled || loading ? undefined : { y: -1 }}
+      whileTap={disabled || loading ? undefined : { scale: 0.96 }}
+      transition={springs.snappy}
       className={clsx(
-        "inline-flex items-center justify-center rounded-xl font-medium transition-all duration-150 focus-ring disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98]",
+        "inline-flex items-center justify-center rounded-xl font-medium transition-colors duration-150 focus-ring disabled:opacity-50 disabled:pointer-events-none",
         variantClasses[variant],
         sizeClasses[size],
         className,
       )}
       {...props}
-    />
+    >
+      {loading && <Loader2 size={size === "sm" ? 13 : 15} className="animate-spin" />}
+      {children}
+    </motion.button>
   ),
 );
 Button.displayName = "Button";

@@ -41,6 +41,13 @@ export class DownloadJob {
   private sizeBytes: number | null = null;
   private finalFilepath = "";
   private startedAt = 0;
+  // Progress events are coalesced to this interval so a fast multi-segment
+  // download (up to 32 concurrent segments, one event per chunk each) can't
+  // flood the IPC channel / renderer re-render loop. The final byte count for
+  // a segment is always flushed on completion, so totals stay accurate even
+  // between ticks.
+  private static readonly PROGRESS_EMIT_INTERVAL_MS = 120;
+  private lastProgressEmitAt = 0;
 
   constructor(id: string, url: string, saveDir: string, requestedSegmentCount: number, dispatcher?: Dispatcher, retryAttempts = 3) {
     this.id = id;
@@ -78,7 +85,20 @@ export class DownloadJob {
       const downloadUrl = meta.actualUrl || this.url;
 
       const canSegment = meta.acceptsRanges && meta.sizeBytes !== null && meta.sizeBytes > 2 * 1024 * 1024;
-      const segmentCount = canSegment ? Math.max(1, Math.min(this.requestedSegmentCount, 32)) : 1;
+      // Adaptive cap: the user's requested segment count (up to 32) used to
+      // apply unconditionally, so e.g. a 3MB file at the default setting
+      // would still open dozens of tiny per-segment connections — each with
+      // its own TLS handshake and request overhead — for a file that can't
+      // meaningfully benefit from that much parallelism. Cap segments so
+      // each one is at least MIN_BYTES_PER_SEGMENT, so segment count scales
+      // with the file instead of always maxing out the user's setting.
+      const MIN_BYTES_PER_SEGMENT = 4 * 1024 * 1024; // 4MB
+      const maxUsefulSegments = meta.sizeBytes !== null
+        ? Math.max(1, Math.floor(meta.sizeBytes / MIN_BYTES_PER_SEGMENT))
+        : this.requestedSegmentCount;
+      const segmentCount = canSegment
+        ? Math.max(1, Math.min(this.requestedSegmentCount, 32, maxUsefulSegments))
+        : 1;
 
       const tempDir = path.join(this.saveDir, ".shanutechx-tmp");
       await fsp.mkdir(tempDir, { recursive: true });
@@ -196,10 +216,22 @@ export class DownloadJob {
       });
 
       this.segmentBytesDone[seg.index] = (this.segmentBytesDone[seg.index] ?? 0) + chunk.length;
-      events.onProgress(this.downloadedBytes, this.sizeBytes);
+      this.emitProgressThrottled(events);
     }
 
     await new Promise<void>((resolve, reject) => fileStream.end((err: unknown) => (err ? reject(err) : resolve())));
+    // Always flush a final, exact progress event when a segment finishes —
+    // even if it lands inside the throttle window — so the UI never sits on
+    // a stale number while waiting for the next tick (or, worse, while the
+    // job moves on to "merging" with the bar short of 100%).
+    events.onProgress(this.downloadedBytes, this.sizeBytes);
+  }
+
+  private emitProgressThrottled(events: DownloadJobEvents): void {
+    const now = Date.now();
+    if (now - this.lastProgressEmitAt < DownloadJob.PROGRESS_EMIT_INTERVAL_MS) return;
+    this.lastProgressEmitAt = now;
+    events.onProgress(this.downloadedBytes, this.sizeBytes);
   }
 
   private async mergeSegments(): Promise<void> {

@@ -17,6 +17,15 @@ const DEFAULTS: AppSettings = {
   maxTotalSpeedKBps: 0, // read by queue-manager.ts globalBucket
   maxSpeedPerFileKBps: 0, // read by queue-manager.ts per-job bucket
 
+  bandwidthScheduleEnabled: false, // read by queue-manager.ts's schedule tick
+  bandwidthScheduleStartHour: 1,
+  bandwidthScheduleEndHour: 6,
+  bandwidthScheduleOffPeakKBps: 0,
+
+  downloadScheduleEnabled: false, // read by queue-manager.ts's schedule tick
+  downloadScheduleStartHour: 1,
+  downloadScheduleEndHour: 6,
+
   proxyType: "none",
   proxyHost: "",
   proxyPort: 0,
@@ -38,6 +47,8 @@ const DEFAULTS: AppSettings = {
 
   minimizeToTray: true,
   theme: "dark",
+
+  autoOpenFolderOnComplete: false, // read by download-complete-actions.ts
 };
 
 type SettingsChangeListener = (settings: AppSettings) => void;
@@ -87,6 +98,11 @@ function clampSettings(partial: Partial<AppSettings>): Partial<AppSettings> {
   if (out.segmentCount !== undefined) out.segmentCount = Math.max(1, Math.min(32, out.segmentCount));
   if (out.maxTotalSpeedKBps !== undefined) out.maxTotalSpeedKBps = Math.max(0, out.maxTotalSpeedKBps);
   if (out.maxSpeedPerFileKBps !== undefined) out.maxSpeedPerFileKBps = Math.max(0, out.maxSpeedPerFileKBps);
+  if (out.bandwidthScheduleStartHour !== undefined) out.bandwidthScheduleStartHour = Math.max(0, Math.min(23, Math.round(out.bandwidthScheduleStartHour)));
+  if (out.bandwidthScheduleEndHour !== undefined) out.bandwidthScheduleEndHour = Math.max(0, Math.min(23, Math.round(out.bandwidthScheduleEndHour)));
+  if (out.bandwidthScheduleOffPeakKBps !== undefined) out.bandwidthScheduleOffPeakKBps = Math.max(0, out.bandwidthScheduleOffPeakKBps);
+  if (out.downloadScheduleStartHour !== undefined) out.downloadScheduleStartHour = Math.max(0, Math.min(23, Math.round(out.downloadScheduleStartHour)));
+  if (out.downloadScheduleEndHour !== undefined) out.downloadScheduleEndHour = Math.max(0, Math.min(23, Math.round(out.downloadScheduleEndHour)));
   if (out.retryAttempts !== undefined) out.retryAttempts = Math.max(0, Math.min(10, out.retryAttempts));
   return out;
 }

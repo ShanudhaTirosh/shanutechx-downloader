@@ -102,7 +102,7 @@ export async function resolveDriveFile(
       size,
       downloadUrl,
     };
-  } catch (error) {
+  } catch {
     // Fallback if HEAD request fails
     return {
       id: fileId,

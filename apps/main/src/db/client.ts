@@ -52,6 +52,17 @@ export function getDb(): BetterSQLite3Database<typeof schema> {
 
   sqliteInstance = new Database(dbPath);
   sqliteInstance.pragma("journal_mode = WAL");
+  // WAL + synchronous=NORMAL is SQLite's own documented recommended pairing:
+  // WAL already makes the database file itself crash-safe without an fsync
+  // on every commit, so NORMAL (fsync only at WAL checkpoints, not every
+  // transaction) is safe here — the only realistic risk is losing the last
+  // few transactions on a power-loss/OS crash (not an app crash), which for
+  // this table is at most a stale progress-byte count that gets overwritten
+  // on the next tick anyway. better-sqlite3 is synchronous and runs on
+  // Electron's main thread, so every write briefly blocks IPC/UI handling —
+  // this materially cuts that per-write cost, on top of the write-frequency
+  // throttle in downloads-repo.ts's updateProgress().
+  sqliteInstance.pragma("synchronous = NORMAL");
   sqliteInstance.pragma("foreign_keys = ON");
   sqliteInstance.exec(SCHEMA_SQL);
 

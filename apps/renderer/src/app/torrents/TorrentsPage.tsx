@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
-import { Magnet, Loader2, Pause, Play, Trash2 } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Magnet } from "lucide-react";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
-import { ProgressRing } from "../../components/ui/ProgressRing";
+import { TorrentCard } from "../../components/widgets/TorrentCard";
 import { ipc } from "../../lib/ipc-client";
-import { formatBytes, formatSpeed } from "../../lib/format";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useToast } from "../../components/ui/Toast";
+import { shake, shakeKeyframes, springs, staggerContainer } from "../../lib/motion";
 import type { TorrentStatus } from "@shanutechx/shared-types";
 
 export function TorrentsPage() {
   const [magnet, setMagnet] = useState("");
   const [adding, setAdding] = useState(false);
+  const [shakeKey, setShakeKey] = useState(0);
   const [torrents, setTorrents] = useState<Record<string, TorrentStatus>>({});
   const { settings, load } = useSettingsStore();
   const { showToast } = useToast();
@@ -38,6 +40,7 @@ export function TorrentsPage() {
       await refresh();
       showToast("Torrent added successfully", "success");
     } catch (error) {
+      setShakeKey((k) => k + 1);
       showToast(error instanceof Error ? error.message : "Failed to add torrent", "error");
     } finally {
       setAdding(false);
@@ -49,7 +52,7 @@ export function TorrentsPage() {
       await ipc.invoke("torrents:pause", { infoHash });
       await refresh();
       showToast("Torrent paused", "success");
-    } catch (error) {
+    } catch {
       showToast("Failed to pause torrent", "error");
     }
   }
@@ -59,7 +62,7 @@ export function TorrentsPage() {
       await ipc.invoke("torrents:resume", { infoHash });
       await refresh();
       showToast("Torrent resumed", "success");
-    } catch (error) {
+    } catch {
       showToast("Failed to resume torrent", "error");
     }
   }
@@ -69,7 +72,7 @@ export function TorrentsPage() {
       await ipc.invoke("torrents:remove", { infoHash });
       await refresh();
       showToast("Torrent removed", "success");
-    } catch (error) {
+    } catch {
       showToast("Failed to remove torrent", "error");
     }
   }
@@ -78,10 +81,23 @@ export function TorrentsPage() {
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-xl font-semibold text-zinc-100 mb-1">Torrents</h1>
+      <motion.h1
+        initial={{ opacity: 0, y: -6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={springs.gentle}
+        className="text-xl font-semibold text-zinc-100 mb-1"
+      >
+        Torrents
+      </motion.h1>
       <p className="text-sm text-zinc-500 mb-6">Add magnet links or .torrent files and manage active swarms.</p>
 
-      <form onSubmit={handleAdd} className="glass-panel flex items-center gap-2 p-2 mb-6">
+      <motion.form
+        onSubmit={handleAdd}
+        key={shakeKey}
+        animate={shakeKey > 0 ? { x: shakeKeyframes } : undefined}
+        transition={shake}
+        className="glass-panel flex items-center gap-2 p-2 mb-6"
+      >
         <Magnet size={16} className="text-zinc-500 ml-2 shrink-0" />
         <input
           value={magnet}
@@ -89,69 +105,38 @@ export function TorrentsPage() {
           placeholder="Paste a magnet link…"
           className="flex-1 bg-transparent outline-none text-sm text-zinc-100 placeholder:text-zinc-600 py-2"
         />
-        <Button type="submit" disabled={!magnet.trim() || adding} size="md">
-          {adding ? <Loader2 size={16} className="animate-spin" /> : <Magnet size={16} />} Add
+        <Button type="submit" disabled={!magnet.trim() || adding} loading={adding} size="md">
+          {!adding && <Magnet size={16} />} Add
         </Button>
-      </form>
+      </motion.form>
 
-      {list.length === 0 ? (
-        <Card className="text-center py-12">
-          <div className="flex flex-col items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-surface-raised flex items-center justify-center text-zinc-600">
-              <Magnet size={20} />
-            </div>
-            <div>
-              <p className="text-sm text-zinc-400 mb-1">No active torrents</p>
-              <p className="text-xs text-zinc-600">
-                Add a magnet link or .torrent file to start downloading
-              </p>
-            </div>
-          </div>
-        </Card>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {list.map((t) => (
-            <div key={t.infoHash} className="glass-panel flex items-center gap-4 p-4">
-              <ProgressRing percent={t.progress} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-zinc-100 truncate">{t.name}</p>
-                <p className="text-xs text-zinc-500 mt-1">
-                  {formatBytes(t.totalDownloaded)} / {formatBytes(t.totalSize)} · {formatSpeed(t.downloadRateBps)} ↓ · {t.numPeers} peers · {t.state}
-                </p>
+      <AnimatePresence mode="wait">
+        {list.length === 0 ? (
+          <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <Card className="text-center py-12">
+              <div className="flex flex-col items-center gap-4">
+                <div className="h-12 w-12 rounded-xl bg-surface-raised flex items-center justify-center text-zinc-600">
+                  <Magnet size={20} />
+                </div>
+                <div>
+                  <p className="text-sm text-zinc-400 mb-1">No active torrents</p>
+                  <p className="text-xs text-zinc-600">
+                    Add a magnet link or .torrent file to start downloading
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                {t.state === "paused" ? (
-                  <Button
-                    onClick={() => handleResume(t.infoHash)}
-                    size="sm"
-                    variant="secondary"
-                    title="Resume"
-                  >
-                    <Play size={16} />
-                  </Button>
-                ) : t.state === "downloading" || t.state === "seeding" ? (
-                  <Button
-                    onClick={() => handlePause(t.infoHash)}
-                    size="sm"
-                    variant="secondary"
-                    title="Pause"
-                  >
-                    <Pause size={16} />
-                  </Button>
-                ) : null}
-                <Button
-                  onClick={() => handleRemove(t.infoHash)}
-                  size="sm"
-                  variant="secondary"
-                  title="Remove"
-                >
-                  <Trash2 size={16} />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+            </Card>
+          </motion.div>
+        ) : (
+          <motion.div key="list" variants={staggerContainer} initial="initial" animate="animate" className="flex flex-col gap-3">
+            <AnimatePresence initial={false}>
+              {list.map((t) => (
+                <TorrentCard key={t.infoHash} torrent={t} onPause={handlePause} onResume={handleResume} onRemove={handleRemove} />
+              ))}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

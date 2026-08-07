@@ -47,11 +47,26 @@ export const downloadsRepo = {
     }).run();
   },
 
+  // Progress ticks land here from both the HTTP and social-extractor engines
+  // — each of those already throttles its own onProgress callback (Phase 1
+  // + this pass), but downloadedBytes/sizeBytes only matter for surviving an
+  // app restart mid-download; the live UI number comes from the IPC
+  // broadcast, not from reading this back. So the DB write itself is
+  // throttled independently, and coarser than the UI feed: better-sqlite3
+  // is a synchronous call on Electron's main thread, so every write here
+  // briefly blocks IPC/UI handling, and there's no benefit to persisting a
+  // resumability checkpoint more often than every couple of seconds.
+  _lastProgressWriteAt: new Map<string, number>(),
   updateProgress(id: string, downloadedBytes: number, sizeBytes: number | null): void {
+    const now = Date.now();
+    const last = downloadsRepo._lastProgressWriteAt.get(id) ?? 0;
+    if (now - last < 2000) return;
+    downloadsRepo._lastProgressWriteAt.set(id, now);
     getDb().update(downloads).set({ downloadedBytes, sizeBytes }).where(eq(downloads.id, id)).run();
   },
 
   updateStatus(id: string, status: DownloadStatus, errorMessage?: string | null): void {
+    if (status === "failed" || status === "cancelled") downloadsRepo._lastProgressWriteAt.delete(id);
     getDb().update(downloads).set({ status, errorMessage: errorMessage ?? null }).where(eq(downloads.id, id)).run();
   },
 
@@ -65,6 +80,7 @@ export const downloadsRepo = {
    * hardcoded `elapsed = 0` bug. See queue-manager.ts `finishDownload()`.
    */
   complete(id: string, filepath: string, sizeBytes: number, avgSpeedBps: number): void {
+    downloadsRepo._lastProgressWriteAt.delete(id);
     getDb().update(downloads).set({
       status: "complete", filepath, sizeBytes, downloadedBytes: sizeBytes, avgSpeedBps,
       completedAt: new Date().toISOString(),
@@ -80,7 +96,21 @@ export const downloadsRepo = {
     return row ? rowToRecord(row) : null;
   },
 
+  /**
+   * Finds an existing download for this exact URL that isn't in a terminal
+   * "gone" state (failed/cancelled don't count as a duplicate — re-trying a
+   * failed download is the normal, expected thing to do, not something to
+   * warn about). Used to power the "you already downloaded/are downloading
+   * this" confirmation in the Add Download flow.
+   */
+  findActiveOrCompleteByUrl(url: string): DownloadRecord | null {
+    const rows = getDb().select().from(downloads).where(eq(downloads.url, url)).orderBy(desc(downloads.createdAt)).all();
+    const match = rows.find((r) => r.status !== "failed" && r.status !== "cancelled");
+    return match ? rowToRecord(match) : null;
+  },
+
   remove(id: string): void {
+    downloadsRepo._lastProgressWriteAt.delete(id);
     getDb().delete(downloads).where(eq(downloads.id, id)).run();
   },
 

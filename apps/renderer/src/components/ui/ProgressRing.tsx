@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { springs } from "../../lib/motion";
 
 interface ProgressRingProps {
   /** 0-100, or null for an indeterminate/unknown-total state — never fabricate a fake percentage */
@@ -27,7 +28,10 @@ export function ProgressRing({ percent, size = 44, strokeWidth = 4 }: ProgressRi
         strokeDasharray={circumference}
         initial={false}
         animate={{ strokeDashoffset: offset }}
-        transition={{ duration: 0.3, ease: "easeOut" }}
+        // A "firm" spring (no overshoot) — the ring should never visibly
+        // pass 100% and bounce back, but it should still settle with real
+        // weight instead of a linear/eased tween.
+        transition={springs.firm}
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
       />
       <defs>

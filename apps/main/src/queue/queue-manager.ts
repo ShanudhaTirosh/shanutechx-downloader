@@ -5,9 +5,33 @@ import { TokenBucket } from "../utils/token-bucket";
 import { downloadsRepo } from "../db/downloads-repo";
 import { settingsStore, onSettingsChange } from "../settings/settings-store";
 import { buildProxyDispatcher } from "../utils/proxy-agent";
-import type { DownloadRecord } from "@shanutechx/shared-types";
+import { runPostDownloadActions } from "../utils/download-complete-actions";
+import type { DownloadRecord, AppSettings } from "@shanutechx/shared-types";
 
 interface ActiveEntry { job: DownloadJob; perFileBucket: TokenBucket }
+
+/** Shared by both schedule types below — is `hour` inside [start, end), wrapping past midnight when end <= start? */
+function isInHourWindow(hour: number, start: number, end: number): boolean {
+  if (start === end) return false; // zero-width window — schedule is effectively off
+  return start < end ? hour >= start && hour < end : hour >= start || hour < end;
+}
+
+/**
+ * Pure so it's trivially testable and so both the "settings changed" path
+ * and the once-a-minute clock tick can share the exact same rule — no risk
+ * of the two diverging on what "off-peak" means.
+ */
+export function computeEffectiveGlobalKBps(settings: AppSettings, now: Date): number {
+  if (!settings.bandwidthScheduleEnabled) return settings.maxTotalSpeedKBps;
+  const inWindow = isInHourWindow(now.getHours(), settings.bandwidthScheduleStartHour, settings.bandwidthScheduleEndHour);
+  return inWindow ? settings.bandwidthScheduleOffPeakKBps : settings.maxTotalSpeedKBps;
+}
+
+/** Also pure, for the same reason — see computeEffectiveGlobalKBps. */
+export function isDownloadingAllowedNow(settings: AppSettings, now: Date): boolean {
+  if (!settings.downloadScheduleEnabled) return true;
+  return isInHourWindow(now.getHours(), settings.downloadScheduleStartHour, settings.downloadScheduleEndHour);
+}
 
 /**
  * Single source of truth for all download state. The renderer never guesses
@@ -21,17 +45,68 @@ export class QueueManager {
   private globalBucket: TokenBucket;
   private getWindow: () => BrowserWindow | null;
   private lastGlobalSpeedBroadcast = 0;
+  private scheduleTimer: NodeJS.Timeout;
+  // Ids this class paused itself when the download-schedule window closed —
+  // separate from a user-initiated pause specifically so the schedule can
+  // resume ONLY what it paused when the window reopens, never something the
+  // user paused on purpose for an unrelated reason. Any explicit user
+  // pause/resume/cancel call removes the id from this set (see below).
+  private autoPausedIds = new Set<string>();
+  private lastAllowedNow: boolean;
 
   constructor(getWindow: () => BrowserWindow | null) {
     this.getWindow = getWindow;
     const s = settingsStore.get();
-    this.globalBucket = new TokenBucket(s.maxTotalSpeedKBps * 1024);
+    this.globalBucket = new TokenBucket(computeEffectiveGlobalKBps(s, new Date()) * 1024);
+    this.lastAllowedNow = isDownloadingAllowedNow(s, new Date());
 
     onSettingsChange((applied) => {
       // Real-time effect: dragging the speed slider changes throughput
       // immediately — no restart required, no dead setting (audit fix, §2.7).
-      this.globalBucket.setRate(applied.maxTotalSpeedKBps * 1024);
+      this.globalBucket.setRate(computeEffectiveGlobalKBps(applied, new Date()) * 1024);
     });
+
+    // Re-evaluate every minute so both schedules flip automatically at the
+    // scheduled hour even with no settings change to trigger it — e.g. a
+    // download that's been running since 9pm should speed up on its own at
+    // 1am without the user touching Settings, and a download schedule
+    // should pause/resume transfers on its own at the boundary. .unref() so
+    // a leftover timer (there shouldn't be one; QueueManager is a singleton
+    // for the app's lifetime) can never keep the process alive on quit.
+    this.scheduleTimer = setInterval(() => this.runScheduleTick(), 60_000);
+    this.scheduleTimer.unref?.();
+  }
+
+  private runScheduleTick(): void {
+    const settings = settingsStore.get();
+    const now = new Date();
+    this.globalBucket.setRate(computeEffectiveGlobalKBps(settings, now) * 1024);
+
+    const allowedNow = isDownloadingAllowedNow(settings, now);
+    if (allowedNow === this.lastAllowedNow) return;
+    this.lastAllowedNow = allowedNow;
+
+    if (!allowedNow) {
+      // Window just closed — pause every currently-active transfer and
+      // remember which ones so only those get auto-resumed later, not
+      // anything the user pauses manually in the meantime.
+      for (const [id, entry] of this.active) {
+        entry.job.pause();
+        downloadsRepo.updateStatus(id, "paused");
+        this.broadcastStatus(id, "paused");
+        this.autoPausedIds.add(id);
+      }
+    } else {
+      // Window just opened — resume what the schedule paused, then let
+      // promoteNextQueued() start anything still waiting in the queue.
+      for (const id of this.autoPausedIds) {
+        this.active.get(id)?.job.resume();
+        downloadsRepo.updateStatus(id, "downloading");
+        this.broadcastStatus(id, "downloading");
+      }
+      this.autoPausedIds.clear();
+      this.promoteNextQueued();
+    }
   }
 
   list(): DownloadRecord[] {
@@ -43,13 +118,24 @@ export class QueueManager {
     });
   }
 
-  start(url: string, saveDirOverride?: string): { id: string } {
+  start(url: string, saveDirOverride?: string, allowDuplicate?: boolean): { id: string } {
+    if (!allowDuplicate) {
+      const existing = downloadsRepo.findActiveOrCompleteByUrl(url);
+      if (existing) {
+        // Deliberately not a generic Error — see the parsed-prefix contract
+        // documented on IpcInvokeMap["downloads:start"] in shared-types.
+        // The renderer pattern-matches this to offer "add anyway?" instead
+        // of showing it as a failure.
+        throw new Error(`DUPLICATE_URL:${existing.id}`);
+      }
+    }
+
     const settings = settingsStore.get();
     const id = randomUUID();
     downloadsRepo.insert({ id, url, filename: url, sourceType: "http", segments: settings.segmentCount });
 
     void this.resolveSaveDir(settings, saveDirOverride).then((saveDir) => {
-      if (this.active.size < settings.maxSimultaneousDownloads) {
+      if (this.active.size < settings.maxSimultaneousDownloads && isDownloadingAllowedNow(settings, new Date())) {
         this.launch(id, url, saveDir, settings.segmentCount, settings.maxSpeedPerFileKBps);
       } else {
         this.queued.push(id);
@@ -102,6 +188,7 @@ export class QueueManager {
           if (status === "complete") {
             const { filepath, sizeBytes, avgSpeedBps } = job.result;
             downloadsRepo.complete(id, filepath, sizeBytes, avgSpeedBps);
+            runPostDownloadActions(filepath);
           } else if (status === "downloading" || status === "merging") {
             downloadsRepo.updateStatus(id, status as "downloading");
           } else {
@@ -123,6 +210,7 @@ export class QueueManager {
 
   private promoteNextQueued(): void {
     const settings = settingsStore.get();
+    if (!isDownloadingAllowedNow(settings, new Date())) return; // outside the allowed window — stay queued
     while (this.active.size < settings.maxSimultaneousDownloads && this.queued.length > 0) {
       const nextId = this.queued.shift()!;
       const record = downloadsRepo.get(nextId);
@@ -130,9 +218,10 @@ export class QueueManager {
     }
   }
 
-  pause(id: string): void { this.active.get(id)?.job.pause(); downloadsRepo.updateStatus(id, "paused"); }
-  resume(id: string): void { this.active.get(id)?.job.resume(); downloadsRepo.updateStatus(id, "downloading"); }
+  pause(id: string): void { this.autoPausedIds.delete(id); this.active.get(id)?.job.pause(); downloadsRepo.updateStatus(id, "paused"); }
+  resume(id: string): void { this.autoPausedIds.delete(id); this.active.get(id)?.job.resume(); downloadsRepo.updateStatus(id, "downloading"); }
   cancel(id: string): void {
+    this.autoPausedIds.delete(id);
     const entry = this.active.get(id);
     if (entry) { entry.job.cancel(); return; }
     this.queued = this.queued.filter((qid) => qid !== id);

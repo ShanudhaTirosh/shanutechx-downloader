@@ -1,7 +1,9 @@
 import { useEffect } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { AddUrlBar } from "../../components/widgets/AddUrlBar";
 import { DownloadCard } from "../../components/widgets/DownloadCard";
 import { useDownloadsStore } from "../../stores/downloadsStore";
+import { springs, staggerContainer } from "../../lib/motion";
 
 export function DownloadsPage() {
   const { items, refresh, subscribe } = useDownloadsStore();
@@ -14,7 +16,14 @@ export function DownloadsPage() {
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-xl font-semibold text-zinc-100 mb-1">Direct Downloads</h1>
+      <motion.h1
+        initial={{ opacity: 0, y: -6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={springs.gentle}
+        className="text-xl font-semibold text-zinc-100 mb-1"
+      >
+        Direct Downloads
+      </motion.h1>
       <p className="text-sm text-zinc-500 mb-2">
         Download files directly from HTTP/HTTPS URLs - perfect for direct file links.
       </p>
@@ -22,13 +31,25 @@ export function DownloadsPage() {
         ⚠️ For YouTube, TikTok, Instagram, Pornhub, or other video platforms → Use <strong className="text-brand-secondary">Social Grab</strong> tab instead
       </p>
       <AddUrlBar />
-      {list.length === 0 ? (
-        <p className="text-sm text-zinc-600 text-center py-16">No downloads yet — paste a URL above to get started.</p>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {list.map((item) => <DownloadCard key={item.id} item={item} />)}
-        </div>
-      )}
+      <AnimatePresence mode="wait">
+        {list.length === 0 ? (
+          <motion.p
+            key="empty"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="text-sm text-zinc-600 text-center py-16"
+          >
+            No downloads yet — paste a URL above to get started.
+          </motion.p>
+        ) : (
+          <motion.div key="list" variants={staggerContainer} initial="initial" animate="animate" className="flex flex-col gap-3">
+            <AnimatePresence initial={false}>
+              {list.map((item) => <DownloadCard key={item.id} item={item} />)}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

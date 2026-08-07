@@ -112,7 +112,14 @@ function toStatus(t: WTTorrent): TorrentStatus {
     totalDownloaded: t.downloaded,
     totalSize: t.length,
     numPeers: t.numPeers,
-    state: t.done ? "finished" : t.paused ? "paused" : t.numPeers === 0 ? "downloading_metadata" : "downloading",
+    // BUG FIX: a completed torrent was always reported as "finished", never
+    // "seeding" — but WebTorrent keeps uploading to peers after completion
+    // unless explicitly destroyed. Two real consequences of the old mapping:
+    // (1) the UI's pause button only shows for "downloading" | "seeding",
+    // so a finished torrent could never be paused again once done; (2) the
+    // seeding "still active" indicator in TorrentCard never lit up, since
+    // that state was never actually emitted.
+    state: t.done ? (t.paused ? "paused" : "seeding") : t.paused ? "paused" : t.numPeers === 0 ? "downloading_metadata" : "downloading",
     etaSec: t.timeRemaining && Number.isFinite(t.timeRemaining) ? t.timeRemaining / 1000 : null,
   };
 }

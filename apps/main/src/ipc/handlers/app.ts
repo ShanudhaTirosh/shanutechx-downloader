@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog } from "electron";
+import { app, BrowserWindow, dialog, shell } from "electron";
+import fs from "node:fs";
 import { autoUpdater } from "electron-updater";
 import { registerHandler } from "./index";
 import { getMissingBinaries, downloadMissingBinaries } from "../../utils/binary-manager";
@@ -82,6 +83,16 @@ export function registerAppHandlers(): void {
 
   registerHandler("app:downloadUpdate", async () => {
     await autoUpdater.downloadUpdate();
+  });
+
+  registerHandler("app:showInFolder", (req) => {
+    // Guard existence ourselves rather than letting shell.showItemInFolder
+    // fail silently/inconsistently across platforms for a path whose file
+    // was since moved or deleted (e.g. cleared from history but the row
+    // hadn't refreshed client-side yet).
+    if (!req.filepath || !fs.existsSync(req.filepath)) return { success: false };
+    shell.showItemInFolder(req.filepath);
+    return { success: true };
   });
 }
 

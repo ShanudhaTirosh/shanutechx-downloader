@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { 
-  Loader2, FolderOpen, RefreshCw, Video, Image, Music, 
-  ChevronDown, ChevronUp, Settings, Zap, Sparkles, CheckCircle2
+  FolderOpen, RefreshCw, Video, Image, Music, 
+  ChevronDown, Settings, Zap, Sparkles, CheckCircle2
 } from "lucide-react";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { Toggle } from "../../components/ui/Toggle";
 import { useToast } from "../../components/ui/Toast";
 import { ipc } from "../../lib/ipc-client";
+import { shake, shakeKeyframes, springs } from "../../lib/motion";
 
 type FormatCategory = "video" | "audio" | "image";
 
@@ -86,6 +88,7 @@ export function ConverterPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [useGPU, setUseGPU] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<FormatCategory | "all">("all");
+  const [shakeKey, setShakeKey] = useState(0);
   
   // Advanced options
   const [resolution, setResolution] = useState("");
@@ -136,13 +139,14 @@ export function ConverterPage() {
         setInputPath(result.filePath);
         showToast("File selected successfully", "success");
       }
-    } catch (error) {
+    } catch {
       showToast("Failed to select file", "error");
     }
   }
 
   async function handleQuickConvert(preset: ConversionPreset) {
     if (!inputPath.trim()) {
+      setShakeKey((k) => k + 1);
       showToast("Please select an input file first", "error");
       return;
     }
@@ -157,6 +161,7 @@ export function ConverterPage() {
 
   async function handleCustomConvert() {
     if (!inputPath.trim()) {
+      setShakeKey((k) => k + 1);
       showToast("Please select an input file first", "error");
       return;
     }
@@ -216,6 +221,7 @@ export function ConverterPage() {
       </div>
 
       {/* File Input */}
+      <motion.div key={shakeKey} animate={shakeKey > 0 ? { x: shakeKeyframes } : undefined} transition={shake}>
       <Card className="mb-4 p-4">
         <div className="flex items-center gap-2 mb-2">
           <FolderOpen size={16} className="text-zinc-500" />
@@ -240,6 +246,7 @@ export function ConverterPage() {
           </div>
         )}
       </Card>
+      </motion.div>
 
       {/* Quick Presets */}
       <Card className="mb-4 p-4">
@@ -248,53 +255,54 @@ export function ConverterPage() {
             <Zap size={16} className="text-yellow-400" />
             <h3 className="text-sm font-medium text-zinc-300">Quick Presets</h3>
           </div>
-          <div className="flex gap-1">
-            <button
-              onClick={() => setSelectedCategory("all")}
-              className={`px-2 py-1 text-xs rounded ${selectedCategory === "all" ? "bg-purple-500/20 text-purple-300" : "text-zinc-500 hover:text-zinc-300"}`}
-            >
-              All
-            </button>
-            <button
-              onClick={() => setSelectedCategory("video")}
-              className={`px-2 py-1 text-xs rounded ${selectedCategory === "video" ? "bg-purple-500/20 text-purple-300" : "text-zinc-500 hover:text-zinc-300"}`}
-            >
-              Video
-            </button>
-            <button
-              onClick={() => setSelectedCategory("audio")}
-              className={`px-2 py-1 text-xs rounded ${selectedCategory === "audio" ? "bg-purple-500/20 text-purple-300" : "text-zinc-500 hover:text-zinc-300"}`}
-            >
-              Audio
-            </button>
-            <button
-              onClick={() => setSelectedCategory("image")}
-              className={`px-2 py-1 text-xs rounded ${selectedCategory === "image" ? "bg-purple-500/20 text-purple-300" : "text-zinc-500 hover:text-zinc-300"}`}
-            >
-              Image
-            </button>
+          <div className="flex gap-1 relative">
+            {(["all", "video", "audio", "image"] as const).map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`relative px-2 py-1 text-xs rounded transition-colors ${selectedCategory === cat ? "text-purple-300" : "text-zinc-500 hover:text-zinc-300"}`}
+              >
+                {selectedCategory === cat && (
+                  <motion.span
+                    layoutId="converter-category-pill"
+                    transition={springs.gentle}
+                    className="absolute inset-0 bg-purple-500/20 rounded"
+                  />
+                )}
+                <span className="relative z-10 capitalize">{cat}</span>
+              </button>
+            ))}
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {filteredPresets.map((preset) => (
-            <button
-              key={preset.name}
-              onClick={() => handleQuickConvert(preset)}
-              disabled={running || !inputPath}
-              className="group flex items-start gap-3 p-3 rounded-lg bg-surface-raised border border-surface-border hover:border-purple-500/50 hover:bg-purple-500/5 transition-all disabled:opacity-40 disabled:cursor-not-allowed text-left relative overflow-hidden"
-            >
-              {/* Hover gradient effect */}
-              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/0 to-purple-500/0 group-hover:from-purple-500/10 group-hover:to-transparent transition-all opacity-0 group-hover:opacity-100" />
-              
-              <div className="shrink-0 mt-0.5 text-purple-400 group-hover:text-purple-300 transition-colors relative z-10">
-                {preset.icon}
-              </div>
-              <div className="flex-1 min-w-0 relative z-10">
-                <p className="text-sm font-medium text-zinc-100 group-hover:text-white transition-colors">{preset.name}</p>
-                <p className="text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors">{preset.description}</p>
-              </div>
-            </button>
-          ))}
+          <AnimatePresence mode="popLayout">
+            {filteredPresets.map((preset) => (
+              <motion.button
+                key={preset.name}
+                layout
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                transition={springs.gentle}
+                whileHover={running || !inputPath ? undefined : { y: -2 }}
+                whileTap={running || !inputPath ? undefined : { scale: 0.97 }}
+                onClick={() => handleQuickConvert(preset)}
+                disabled={running || !inputPath}
+                className="group flex items-start gap-3 p-3 rounded-lg bg-surface-raised border border-surface-border hover:border-purple-500/50 hover:bg-purple-500/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-left relative overflow-hidden"
+              >
+                {/* Hover gradient effect */}
+                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/0 to-purple-500/0 group-hover:from-purple-500/10 group-hover:to-transparent transition-all opacity-0 group-hover:opacity-100" />
+                
+                <div className="shrink-0 mt-0.5 text-purple-400 group-hover:text-purple-300 transition-colors relative z-10">
+                  {preset.icon}
+                </div>
+                <div className="flex-1 min-w-0 relative z-10">
+                  <p className="text-sm font-medium text-zinc-100 group-hover:text-white transition-colors">{preset.name}</p>
+                  <p className="text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors">{preset.description}</p>
+                </div>
+              </motion.button>
+            ))}
+          </AnimatePresence>
         </div>
       </Card>
 
@@ -368,97 +376,104 @@ export function ConverterPage() {
         </div>
 
         {/* Advanced Options */}
-        <button
+        <motion.button
           onClick={() => setShowAdvanced(!showAdvanced)}
+          whileTap={{ scale: 0.97 }}
+          transition={springs.snappy}
           className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-100 transition-colors mb-3"
         >
-          {showAdvanced ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          <motion.span animate={{ rotate: showAdvanced ? 180 : 0 }} transition={springs.snappy} className="inline-flex">
+            <ChevronDown size={16} />
+          </motion.span>
           Advanced Options
-        </button>
+        </motion.button>
 
-        {showAdvanced && (
-          <div className="grid grid-cols-2 gap-3 mb-4 p-3 bg-surface-raised rounded-lg">
-            <div>
-              <label className="text-xs text-zinc-500 mb-1 block">Resolution</label>
-              <input
-                type="text"
-                value={resolution}
-                onChange={(e) => setResolution(e.target.value)}
-                placeholder="e.g., 1920x1080"
-                className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-600"
-              />
+        <AnimatePresence initial={false}>
+          {showAdvanced && (
+            <motion.div
+              key="advanced"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={springs.firm}
+              className="overflow-hidden"
+            >
+            <div className="grid grid-cols-2 gap-3 mb-4 p-3 bg-surface-raised rounded-lg">
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Resolution</label>
+                <input
+                  type="text"
+                  value={resolution}
+                  onChange={(e) => setResolution(e.target.value)}
+                  placeholder="e.g., 1920x1080"
+                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-600"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Video Bitrate</label>
+                <input
+                  type="text"
+                  value={videoBitrate}
+                  onChange={(e) => setVideoBitrate(e.target.value)}
+                  placeholder="e.g., 5M or 2000k"
+                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-600"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Audio Bitrate</label>
+                <input
+                  type="text"
+                  value={audioBitrate}
+                  onChange={(e) => setAudioBitrate(e.target.value)}
+                  placeholder="e.g., 320k or 192k"
+                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-600"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">FPS</label>
+                <input
+                  type="text"
+                  value={fps}
+                  onChange={(e) => setFps(e.target.value)}
+                  placeholder="e.g., 30 or 60"
+                  className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-600"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs text-zinc-500 mb-1 block">Encoding Preset (Speed vs Quality)</label>
+                <select
+                  value={preset}
+                  onChange={(e) => setPreset(e.target.value)}
+                  className="w-full bg-zinc-900 border border-surface-border rounded px-2 py-1.5 text-sm text-zinc-100 [&>option]:bg-zinc-900 [&>option]:text-zinc-100"
+                  style={{
+                    colorScheme: 'dark'
+                  }}
+                >
+                  <option value="ultrafast">Ultra Fast (Largest file)</option>
+                  <option value="superfast">Super Fast</option>
+                  <option value="veryfast">Very Fast</option>
+                  <option value="faster">Faster</option>
+                  <option value="fast">Fast</option>
+                  <option value="medium">Medium (Recommended)</option>
+                  <option value="slow">Slow (Better compression)</option>
+                  <option value="slower" style={{ backgroundColor: '#18181b', color: '#e4e4e7' }}>Slower</option>
+                  <option value="veryslow" style={{ backgroundColor: '#18181b', color: '#e4e4e7' }}>Very Slow (Best compression)</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="text-xs text-zinc-500 mb-1 block">Video Bitrate</label>
-              <input
-                type="text"
-                value={videoBitrate}
-                onChange={(e) => setVideoBitrate(e.target.value)}
-                placeholder="e.g., 5M or 2000k"
-                className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-600"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-zinc-500 mb-1 block">Audio Bitrate</label>
-              <input
-                type="text"
-                value={audioBitrate}
-                onChange={(e) => setAudioBitrate(e.target.value)}
-                placeholder="e.g., 320k or 192k"
-                className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-600"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-zinc-500 mb-1 block">FPS</label>
-              <input
-                type="text"
-                value={fps}
-                onChange={(e) => setFps(e.target.value)}
-                placeholder="e.g., 30 or 60"
-                className="w-full bg-surface border border-surface-border rounded px-2 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-600"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="text-xs text-zinc-500 mb-1 block">Encoding Preset (Speed vs Quality)</label>
-              <select
-                value={preset}
-                onChange={(e) => setPreset(e.target.value)}
-                className="w-full bg-zinc-900 border border-surface-border rounded px-2 py-1.5 text-sm text-zinc-100 [&>option]:bg-zinc-900 [&>option]:text-zinc-100"
-                style={{
-                  colorScheme: 'dark'
-                }}
-              >
-                <option value="ultrafast">Ultra Fast (Largest file)</option>
-                <option value="superfast">Super Fast</option>
-                <option value="veryfast">Very Fast</option>
-                <option value="faster">Faster</option>
-                <option value="fast">Fast</option>
-                <option value="medium">Medium (Recommended)</option>
-                <option value="slow">Slow (Better compression)</option>
-                <option value="slower" style={{ backgroundColor: '#18181b', color: '#e4e4e7' }}>Slower</option>
-                <option value="veryslow" style={{ backgroundColor: '#18181b', color: '#e4e4e7' }}>Very Slow (Best compression)</option>
-              </select>
-            </div>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Convert Button */}
-        <Button 
+        <Button
           onClick={handleCustomConvert}
           disabled={!inputPath.trim() || running}
+          loading={running}
           className="w-full"
         >
-          {running ? (
-            <>
-              <Loader2 size={16} className="animate-spin" />
-              Converting...
-            </>
-          ) : (
-            <>
-              <RefreshCw size={16} />
-              Start Conversion
-            </>
-          )}
+          {!running && <RefreshCw size={16} />}
+          {running ? "Converting..." : "Start Conversion"}
         </Button>
       </Card>
 

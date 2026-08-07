@@ -4,6 +4,7 @@ import type { BrowserWindow } from "electron";
 import { ConverterJob } from "./converter-job";
 import { resolveBinaries } from "../social-extractor/binaries";
 import { reserveUniqueFilepath } from "../../utils/filename";
+import { runProcess } from "../../utils/spawn-process";
 
 /**
  * Universal FFmpeg-based converter - 100% offline, no API needed
@@ -132,7 +133,20 @@ export class UniversalConverter {
   async convert(options: ConversionOptions): Promise<{ taskId: string }> {
     const taskId = randomUUID();
     const { ffmpeg } = resolveBinaries();
-    
+
+    // Resolve "auto" hardware acceleration to a real, probed encoder choice
+    // (see detectHardwareAcceleration) instead of the old decode-only
+    // `-hwaccel auto` flag that never touched the encoder. Priority follows
+    // typical desktop availability: NVIDIA NVENC first (fastest, most
+    // consistently available across driver versions), then Intel Quick
+    // Sync, then AMD AMF. Falls through to CPU encoding if this ffmpeg
+    // build has none of them.
+    let resolvedHwAccel = options.hwAccel;
+    if (options.hwAccel === "auto") {
+      const available = await detectHardwareAcceleration(ffmpeg);
+      resolvedHwAccel = available.nvenc ? "nvenc" : available.qsv ? "qsv" : available.amf ? "amf" : "none";
+    }
+
     // Determine output path
     const inputExt = path.extname(options.inputPath);
     const inputBase = path.basename(options.inputPath, inputExt);
@@ -141,7 +155,7 @@ export class UniversalConverter {
     const outputPath = await reserveUniqueFilepath(outputDir, outputName);
 
     // Build FFmpeg arguments
-    const ffmpegArgs = this.buildFFmpegArgs(options);
+    const ffmpegArgs = this.buildFFmpegArgs({ ...options, hwAccel: resolvedHwAccel });
 
     const task: ConversionTask = {
       id: taskId,
@@ -202,15 +216,17 @@ export class UniversalConverter {
       throw new Error(`Unsupported output format: ${format}`);
     }
 
-    // Hardware acceleration
-    if (options.hwAccel && options.hwAccel !== "none") {
-      if (options.hwAccel === "auto") {
-        // Try to auto-detect (will fallback to software if not available)
-        args.push("-hwaccel", "auto");
-      } else {
-        args.push("-hwaccel", options.hwAccel);
-      }
-    }
+    // NOTE: no `-hwaccel <method>` decode flag here on purpose. ffmpeg only
+    // honors `-hwaccel` when it appears *before* `-i` on the command line,
+    // but ConverterJob currently assembles argv as `-i <input> ...ffmpegArgs`
+    // — these args always land after `-i`, so a decode-side hwaccel flag
+    // would silently do nothing (or in some builds, error) rather than
+    // accelerate anything. Wiring it up correctly needs ConverterJob to
+    // accept a separate pre-input argument list; tracked as a follow-up
+    // rather than shipped half-working. The encoder selection below (GPU
+    // *encode*, picked from the ffmpeg build's actually-probed capabilities
+    // in detectHardwareAcceleration) is unaffected by this and does work —
+    // encoding is the more expensive half of most conversions anyway.
 
     // Video codec and settings
     if ("video" in codecInfo && codecInfo.video) {
@@ -466,18 +482,50 @@ export const CONVERSION_PRESETS = {
 } as const;
 
 /**
- * Detect available hardware acceleration
+ * Detect available hardware-accelerated encoders by actually probing this
+ * machine's ffmpeg build, instead of guessing.
+ *
+ * BUG FIX: this used to be a stub that always returned all-false ("This
+ * would need to actually probe FFmpeg encoders. For now, return a
+ * placeholder") — meaning the "auto" hardware-acceleration option never
+ * did anything beyond adding a decode-side `-hwaccel auto` flag. The video
+ * *encoder* (the far more expensive half of a conversion) always stayed on
+ * CPU libx264/libx265 regardless of what GPU was in the machine or what the
+ * "Use GPU acceleration" toggle in Settings claimed to do. `ffmpeg -encoders`
+ * lists every encoder this specific ffmpeg build was compiled with — a
+ * locally-built or minimal ffmpeg may lack nvenc/qsv/amf support even on
+ * hardware that could otherwise support it, so probing beats assuming.
+ *
+ * Result is memoized per ffmpeg binary path: encoder support doesn't change
+ * between conversions in the same app session, so there's no reason to
+ * re-spawn ffmpeg -encoders (a real subprocess, non-trivial to parse) on
+ * every single conversion.
  */
-export async function detectHardwareAcceleration(): Promise<{
-  nvenc: boolean;
-  qsv: boolean;
-  amf: boolean;
-}> {
-  // This would need to actually probe FFmpeg encoders
-  // For now, return a placeholder
-  return {
-    nvenc: false,
-    qsv: false,
-    amf: false,
-  };
+const hwAccelCache = new Map<string, Promise<{ nvenc: boolean; qsv: boolean; amf: boolean }>>();
+
+export async function detectHardwareAcceleration(
+  ffmpegPath: string,
+): Promise<{ nvenc: boolean; qsv: boolean; amf: boolean }> {
+  const cached = hwAccelCache.get(ffmpegPath);
+  if (cached) return cached;
+
+  const probe = (async () => {
+    try {
+      const { promise } = runProcess(ffmpegPath, ["-hide_banner", "-encoders"], { timeoutMs: 10_000 });
+      const { stdout } = await promise;
+      return {
+        nvenc: stdout.includes("h264_nvenc") || stdout.includes("hevc_nvenc"),
+        qsv: stdout.includes("h264_qsv") || stdout.includes("hevc_qsv"),
+        amf: stdout.includes("h264_amf") || stdout.includes("hevc_amf"),
+      };
+    } catch {
+      // ffmpeg missing, unreadable, or -encoders unsupported by this build
+      // — fail closed to "no hardware encoders" rather than throwing, since
+      // this is a best-effort optimization, not a required capability.
+      return { nvenc: false, qsv: false, amf: false };
+    }
+  })();
+
+  hwAccelCache.set(ffmpegPath, probe);
+  return probe;
 }

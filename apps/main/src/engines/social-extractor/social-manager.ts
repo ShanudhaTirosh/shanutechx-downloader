@@ -5,6 +5,7 @@ import { SocialDownloadJob } from "./social-download-job";
 import { resolveBinaries } from "./binaries";
 import { downloadsRepo } from "../../db/downloads-repo";
 import { settingsStore } from "../../settings/settings-store";
+import { runPostDownloadActions } from "../../utils/download-complete-actions";
 import type { MediaFormatOption, MediaInfo } from "@shanutechx/shared-types";
 
 export class SocialManager {
@@ -38,7 +39,8 @@ export class SocialManager {
       },
       onStatus: (status, errorMessage) => {
         if (status === "complete") {
-          downloadsRepo.complete(id, job.filepath, 0, 0);
+          downloadsRepo.complete(id, job.filepath, job.sizeBytes ?? 0, job.avgSpeedBps);
+          runPostDownloadActions(job.filepath);
         } else {
           // 'cancelled' is a REAL status here, not remapped to 'failed' the
           // way the old app's exception-based cancel hack forced it to be.
