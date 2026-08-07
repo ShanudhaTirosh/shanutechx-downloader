@@ -134,6 +134,15 @@ export interface AppSettings {
   subtitleLanguages: string;
   ignoreCertificateErrors: boolean; // explicit opt-in, OFF by default (fixes old nocheckcertificate=True bug)
 
+  /**
+   * Pass cookies from the specified browser to yt-dlp for sites that require
+   * login (e.g. YouTube age-restricted videos, private playlists).
+   * Empty string = disabled. Supported values: 'chrome', 'firefox', 'edge',
+   * 'brave', 'safari', 'chromium', 'opera'.
+   * Passed as --cookies-from-browser <value> to yt-dlp.
+   */
+  cookiesFromBrowser: string;
+
   torrentSavePath: string;
   torrentPortStart: number;
   torrentPortEnd: number;
@@ -231,6 +240,7 @@ export interface IpcInvokeMap {
   "app:downloadUpdate": { req: void; res: void };
   /** Reveals the file in the OS file manager (Explorer/Finder/etc), selected. Silently no-ops if the path no longer exists. */
   "app:showInFolder": { req: { filepath: string }; res: { success: boolean } };
+  "app:selectDirectory": { req: { title?: string; defaultPath?: string }; res: { dirPath: string | null } };
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeMap;

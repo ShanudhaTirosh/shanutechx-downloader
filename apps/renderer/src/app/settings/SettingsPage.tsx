@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Download, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
+import { Download, RefreshCw, CheckCircle2, AlertCircle, FolderOpen } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "../../components/ui/Card";
 import { Toggle } from "../../components/ui/Toggle";
 import { Button } from "../../components/ui/Button";
@@ -288,6 +288,32 @@ export function SettingsPage() {
       <Card>
         <CardHeader><CardTitle>Downloads</CardTitle></CardHeader>
         <div className="flex flex-col gap-4">
+          {/* Download Location */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm text-zinc-300">Download location</span>
+            <div className="flex items-center gap-2">
+              <span className="flex-1 truncate text-sm text-zinc-400 bg-surface-raised border border-surface-border rounded-lg px-3 py-2">
+                {settings.downloadDir || <span className="text-zinc-600 italic">Default Downloads folder</span>}
+              </span>
+              <Button
+                size="md"
+                variant="secondary"
+                onClick={async () => {
+                  const result = await ipc.invoke("app:selectDirectory", {
+                    title: "Choose Download Location",
+                    defaultPath: settings.downloadDir || undefined,
+                  });
+                  if (result.dirPath) update({ downloadDir: result.dirPath });
+                }}
+              >
+                <FolderOpen size={15} /> Browse
+              </Button>
+            </div>
+            <span className="text-xs text-zinc-600">Where new downloads are saved. Leave default to use the system Downloads folder.</span>
+          </div>
+
+          <div className="border-t border-surface-border/50 -mx-4 my-1" />
+
           <NumberField
             label="Max simultaneous downloads"
             value={settings.maxSimultaneousDownloads}
@@ -481,6 +507,32 @@ export function SettingsPage() {
           />
           <p className="text-xs text-zinc-600 -mt-2">
             Off by default. The old app disabled TLS verification unconditionally for every social-media download — this app never does that unless you explicitly opt in here.
+          </p>
+
+          <div className="border-t border-surface-border/50 -mx-4 my-1" />
+
+          {/* Cookies from browser — fixes YouTube "Sign in to confirm you're not a bot" */}
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm text-zinc-300">Pass cookies from browser (for YouTube &amp; age-restricted sites)</span>
+            <select
+              value={settings.cookiesFromBrowser}
+              onChange={(e) => update({ cookiesFromBrowser: e.target.value })}
+              className="bg-surface-raised border border-surface-border rounded-lg px-3 py-2 text-sm text-zinc-100 focus-ring"
+            >
+              <option value="">Disabled (no cookies)</option>
+              <option value="chrome">Google Chrome</option>
+              <option value="firefox">Mozilla Firefox</option>
+              <option value="edge">Microsoft Edge</option>
+              <option value="brave">Brave</option>
+              <option value="chromium">Chromium</option>
+              <option value="opera">Opera</option>
+              <option value="safari">Safari (macOS only)</option>
+            </select>
+          </label>
+          <p className="text-xs text-zinc-600 -mt-2">
+            Fixes <span className="text-zinc-400">“Sign in to confirm you’re not a bot”</span> on YouTube.
+            The selected browser must be open and logged in. Cookies are never stored by this app — they are read
+            directly from the browser’s local cookie database by yt-dlp each time a download starts.
           </p>
         </div>
       </Card>

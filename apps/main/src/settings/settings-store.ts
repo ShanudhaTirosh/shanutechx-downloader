@@ -39,6 +39,7 @@ const DEFAULTS: AppSettings = {
   autoEmbedThumbnail: true,
   subtitleLanguages: "",
   ignoreCertificateErrors: false, // OFF by default — fixes the old nocheckcertificate=True bug
+  cookiesFromBrowser: "", // empty = disabled; set to 'chrome', 'firefox', 'edge', etc.
 
   torrentSavePath: "",
   torrentPortStart: 6881,

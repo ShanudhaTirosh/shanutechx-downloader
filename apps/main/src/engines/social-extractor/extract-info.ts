@@ -15,10 +15,14 @@ interface YtDlpFlatInfo {
  * command line anywhere in this file.
  */
 export async function extractMediaInfo(
-  url: string, ytDlpPath: string, ignoreCertificateErrors: boolean,
+  url: string, ytDlpPath: string, ignoreCertificateErrors: boolean, cookiesFromBrowser?: string,
 ): Promise<MediaInfo> {
   const args = ["--dump-json", "--no-playlist", "--no-warnings", "--socket-timeout", "20"];
-  if (ignoreCertificateErrors) args.push("--no-check-certificate"); // OFF unless the user explicitly opted in (audit fix §3.6)
+  if (ignoreCertificateErrors) args.push("--no-check-certificate");
+  // Pass browser cookies when configured — fixes YouTube "Sign in to confirm
+  // you're not a bot" errors. The browser must be open (its cookie DB unlocked)
+  // for this to work. Supported: chrome, firefox, edge, brave, safari, chromium, opera.
+  if (cookiesFromBrowser && cookiesFromBrowser.trim()) args.push("--cookies-from-browser", cookiesFromBrowser.trim());
   args.push(url);
 
   const { promise } = runProcess(ytDlpPath, args, { timeoutMs: 30_000 });

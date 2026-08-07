@@ -15,7 +15,7 @@ export class SocialManager {
   async extract(url: string): Promise<MediaInfo> {
     const { ytDlp } = resolveBinaries();
     const settings = settingsStore.get();
-    return extractMediaInfo(url, ytDlp, settings.ignoreCertificateErrors);
+    return extractMediaInfo(url, ytDlp, settings.ignoreCertificateErrors, settings.cookiesFromBrowser);
   }
 
   start(url: string, format: MediaFormatOption): { id: string } {
@@ -27,7 +27,7 @@ export class SocialManager {
 
     const job = new SocialDownloadJob(
       id, url, settings.downloadDir, format.ytdlpFormat, ytDlp, settings.ignoreCertificateErrors,
-      settings.subtitleLanguages, settings.autoEmbedThumbnail,
+      settings.subtitleLanguages, settings.autoEmbedThumbnail, settings.cookiesFromBrowser,
     );
     this.jobs.set(id, job);
 

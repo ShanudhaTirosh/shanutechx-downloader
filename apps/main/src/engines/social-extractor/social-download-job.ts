@@ -69,6 +69,7 @@ export class SocialDownloadJob {
     private ignoreCertificateErrors: boolean,
     private subtitleLanguages: string,
     private autoEmbedThumbnail: boolean,
+    private cookiesFromBrowser: string,
   ) {}
 
   cancel(): void {
@@ -124,6 +125,8 @@ export class SocialDownloadJob {
     if (this.subtitleLanguages.trim()) {
       args.push("--write-subs", "--embed-subs", "--sub-langs", this.subtitleLanguages.trim());
     }
+    // Pass browser cookies when configured — fixes YouTube bot-detection errors.
+    if (this.cookiesFromBrowser.trim()) args.push("--cookies-from-browser", this.cookiesFromBrowser.trim());
     args.push(this.url);
 
     events.onStatus("downloading");

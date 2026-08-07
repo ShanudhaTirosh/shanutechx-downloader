@@ -1,11 +1,27 @@
 import { app, BrowserWindow, dialog, shell } from "electron";
 import fs from "node:fs";
+import path from "node:path";
 import { autoUpdater } from "electron-updater";
 import { registerHandler } from "./index";
 import { getMissingBinaries, downloadMissingBinaries } from "../../utils/binary-manager";
 
+// Read app version from our own package.json rather than calling app.getVersion().
+// In dev mode, app.getVersion() returns the Electron runtime version (e.g. 33.4.11)
+// because Electron is the process being run, not the packaged app.
+const APP_VERSION = (() => {
+  try {
+    // In compiled output: __dirname = apps/main/dist → package.json is one level up
+    // In tsx dev mode: __dirname = apps/main/src → package.json is also one level up
+    const pkgPath = path.join(__dirname, "../package.json");
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as { version?: string };
+    return pkg.version ?? "0.2.0";
+  } catch {
+    return "0.2.0";
+  }
+})();
+
 export function registerAppHandlers(): void {
-  registerHandler("app:getVersion", () => ({ version: app.getVersion() }));
+  registerHandler("app:getVersion", () => ({ version: APP_VERSION }));
   
   registerHandler("app:minimize", () => {
     const win = BrowserWindow.getFocusedWindow();
@@ -93,6 +109,22 @@ export function registerAppHandlers(): void {
     if (!req.filepath || !fs.existsSync(req.filepath)) return { success: false };
     shell.showItemInFolder(req.filepath);
     return { success: true };
+  });
+
+  registerHandler("app:selectDirectory", async (req) => {
+    const win = BrowserWindow.getFocusedWindow();
+    const result = win
+      ? await dialog.showOpenDialog(win, {
+          title: req.title ?? "Select Folder",
+          defaultPath: req.defaultPath ?? app.getPath("downloads"),
+          properties: ["openDirectory", "createDirectory"],
+        })
+      : await dialog.showOpenDialog({
+          title: req.title ?? "Select Folder",
+          defaultPath: req.defaultPath ?? app.getPath("downloads"),
+          properties: ["openDirectory", "createDirectory"],
+        });
+    return { dirPath: result.canceled ? null : (result.filePaths[0] ?? null) };
   });
 }
 
