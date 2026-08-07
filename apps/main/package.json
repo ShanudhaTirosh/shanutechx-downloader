@@ -1,6 +1,6 @@
 {
   "name": "@shanutechx/main",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "SHANUTECHX Downloader — Electron main process",
   "author": "SHANUTECHX",
   "private": true,
