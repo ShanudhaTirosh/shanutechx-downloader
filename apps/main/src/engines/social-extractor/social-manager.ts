@@ -48,7 +48,13 @@ export class SocialManager {
     return extractMediaInfo(url, ytDlp, settings.ignoreCertificateErrors, settings.cookiesFromBrowser);
   }
 
-  start(url: string, format: MediaFormatOption, saveDir?: string): { id: string } {
+  start(url: string, format: MediaFormatOption, saveDir?: string, allowDuplicate?: boolean): { id: string } {
+    if (!allowDuplicate) {
+      const existing = downloadsRepo.findActiveOrCompleteByUrl(url);
+      if (existing) {
+        throw new Error(`DUPLICATE_URL:${existing.id}:${existing.filename || format.label}`);
+      }
+    }
     const id = randomUUID();
     downloadsRepo.insert({ id, url, filename: format.label, sourceType: "social", format: format.id });
     this._launch(id, url, format, saveDir);

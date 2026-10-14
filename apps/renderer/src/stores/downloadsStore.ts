@@ -32,9 +32,30 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
     void id;
   },
 
-  pause: async (id) => { await ipc.invoke("downloads:pause", { id }); },
-  resume: async (id) => { await ipc.invoke("downloads:resume", { id }); },
-  cancel: async (id) => { await ipc.invoke("downloads:cancel", { id }); },
+  pause: async (id) => {
+    set((s) => {
+      const existing = s.items[id];
+      if (!existing) return s;
+      return { items: { ...s.items, [id]: { ...existing, status: "paused", speedBps: 0 } } };
+    });
+    await ipc.invoke("downloads:pause", { id });
+  },
+  resume: async (id) => {
+    set((s) => {
+      const existing = s.items[id];
+      if (!existing) return s;
+      return { items: { ...s.items, [id]: { ...existing, status: "downloading" } } };
+    });
+    await ipc.invoke("downloads:resume", { id });
+  },
+  cancel: async (id) => {
+    set((s) => {
+      const existing = s.items[id];
+      if (!existing) return s;
+      return { items: { ...s.items, [id]: { ...existing, status: "cancelled", speedBps: 0 } } };
+    });
+    await ipc.invoke("downloads:cancel", { id });
+  },
 
   refresh: async () => {
     const list = await ipc.invoke("downloads:list", undefined);

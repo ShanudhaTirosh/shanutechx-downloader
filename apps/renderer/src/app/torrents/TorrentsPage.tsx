@@ -20,6 +20,7 @@ export function TorrentsPage() {
   const { settings, load } = useSettingsStore();
   const { showToast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
+  const isAddingRef = useRef(false);
 
   useEffect(() => {
     void load();
@@ -51,7 +52,8 @@ export function TorrentsPage() {
   }
 
   async function addTorrent(magnetOrPath: string) {
-    if (!magnetOrPath.trim() || !effectiveSaveDir) return;
+    if (isAddingRef.current || adding || !magnetOrPath.trim() || !effectiveSaveDir) return;
+    isAddingRef.current = true;
     setAdding(true);
     try {
       await ipc.invoke("torrents:add", {
@@ -66,6 +68,7 @@ export function TorrentsPage() {
       showToast(error instanceof Error ? error.message : "Failed to add torrent", "error");
     } finally {
       setAdding(false);
+      isAddingRef.current = false;
     }
   }
 
@@ -118,6 +121,11 @@ export function TorrentsPage() {
   }
 
   async function handlePause(infoHash: string) {
+    setTorrents((prev) => {
+      const existing = prev[infoHash];
+      if (!existing) return prev;
+      return { ...prev, [infoHash]: { ...existing, paused: true } };
+    });
     try {
       await ipc.invoke("torrents:pause", { infoHash });
       await refresh();
@@ -128,6 +136,11 @@ export function TorrentsPage() {
   }
 
   async function handleResume(infoHash: string) {
+    setTorrents((prev) => {
+      const existing = prev[infoHash];
+      if (!existing) return prev;
+      return { ...prev, [infoHash]: { ...existing, paused: false } };
+    });
     try {
       await ipc.invoke("torrents:resume", { infoHash });
       await refresh();
@@ -138,12 +151,17 @@ export function TorrentsPage() {
   }
 
   async function handleRemove(infoHash: string) {
+    setTorrents((prev) => {
+      const next = { ...prev };
+      delete next[infoHash];
+      return next;
+    });
+    showToast("Torrent removed", "success");
     try {
       await ipc.invoke("torrents:remove", { infoHash });
       await refresh();
-      showToast("Torrent removed", "success");
     } catch {
-      showToast("Failed to remove torrent", "error");
+      // Ignored
     }
   }
 

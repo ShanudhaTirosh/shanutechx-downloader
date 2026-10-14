@@ -197,6 +197,7 @@ export function ConverterPage() {
 
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isStartingRef = useRef(false);
 
   // Load supported formats on mount
   useEffect(() => {
@@ -430,6 +431,8 @@ export function ConverterPage() {
     qual?: "low" | "medium" | "high" | "ultra" | "lossless",
     vCodec?: string
   ) {
+    if (isStarting || isStartingRef.current) return;
+    isStartingRef.current = true;
     setIsStarting(true);
     try {
       const options: any = {
@@ -476,18 +479,20 @@ export function ConverterPage() {
       showToast(error instanceof Error ? error.message : "Conversion failed", "error");
     } finally {
       setIsStarting(false);
+      isStartingRef.current = false;
     }
   }
 
   async function handleCancelTask(taskId: string) {
+    // 0ms optimistic UI update for instant feedback
+    setTasks((prev) =>
+      prev.map((t) => (t.taskId === taskId ? { ...t, status: "cancelled" } : t))
+    );
+    showToast("Conversion cancelled", "info");
     try {
       await ipc.invoke("converter:cancel", { taskId });
-      setTasks((prev) =>
-        prev.map((t) => (t.taskId === taskId ? { ...t, status: "cancelled" } : t))
-      );
-      showToast("Conversion cancelled", "info");
     } catch {
-      showToast("Failed to cancel conversion", "error");
+      // Ignored: UI already marked as cancelled
     }
   }
 

@@ -59,18 +59,42 @@ export function DownloadCard({ item }: { item: DownloadRecord }) {
   }
 
   async function handlePause() {
-    if (isSocial) { await ipc.invoke("social:pause", { id: item.id }); }
-    else { await pause(item.id); }
+    if (isSocial) {
+      useDownloadsStore.setState((s) => {
+        const existing = s.items[item.id];
+        if (!existing) return s;
+        return { items: { ...s.items, [item.id]: { ...existing, status: "paused", speedBps: 0 } } };
+      });
+      await ipc.invoke("social:pause", { id: item.id });
+    } else {
+      await pause(item.id);
+    }
   }
 
   async function handleResume() {
-    if (isSocial) { await ipc.invoke("social:resume", { id: item.id }); }
-    else { await resume(item.id); }
+    if (isSocial) {
+      useDownloadsStore.setState((s) => {
+        const existing = s.items[item.id];
+        if (!existing) return s;
+        return { items: { ...s.items, [item.id]: { ...existing, status: "downloading" } } };
+      });
+      await ipc.invoke("social:resume", { id: item.id });
+    } else {
+      await resume(item.id);
+    }
   }
 
   async function handleCancel() {
-    if (isSocial) { await ipc.invoke("social:cancel", { id: item.id }); }
-    else { await cancel(item.id); }
+    if (isSocial) {
+      useDownloadsStore.setState((s) => {
+        const existing = s.items[item.id];
+        if (!existing) return s;
+        return { items: { ...s.items, [item.id]: { ...existing, status: "cancelled", speedBps: 0 } } };
+      });
+      await ipc.invoke("social:cancel", { id: item.id });
+    } else {
+      await cancel(item.id);
+    }
   }
 
   /** Clear schedule and start the download now */

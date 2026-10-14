@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, exec, type ChildProcess } from "node:child_process";
 
 /**
  * Thin wrapper around Node's built-in child_process.spawn — used instead of
@@ -60,5 +60,18 @@ export function runProcess(
     });
   });
 
-  return { promise, kill: (signal = "SIGTERM") => child?.kill(signal) };
+  return {
+    promise,
+    kill: (signal: NodeJS.Signals = "SIGKILL") => {
+      if (!child) return;
+      if (process.platform === "win32" && child.pid) {
+        try {
+          exec(`taskkill /pid ${child.pid} /T /F`, () => {});
+        } catch {}
+      }
+      try {
+        child.kill(signal);
+      } catch {}
+    },
+  };
 }

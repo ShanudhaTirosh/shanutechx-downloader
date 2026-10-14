@@ -16,6 +16,7 @@ import { useDownloadsStore } from "../../stores/downloadsStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useUiStore } from "../../stores/uiStore";
 import { ScheduleModal } from "../../components/widgets/ScheduleModal";
+import { DuplicateDownloadModal } from "../../components/widgets/DuplicateDownloadModal";
 
 export function SocialPage() {
   const [mode, setMode] = useState<"single" | "batch">("single");
@@ -43,7 +44,12 @@ export function SocialPage() {
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
   // Format currently being scheduled (opens the modal)
   const [schedulingFormat, setSchedulingFormat] = useState<MediaFormatOption | null>(null);
+  // Duplicate download modal state
+  const [duplicateItem, setDuplicateItem] = useState<{ url: string; format: MediaFormatOption; filename?: string } | null>(null);
+
   const inputRef = useRef<HTMLInputElement>(null);
+  const isExtractingRef = useRef(false);
+  const isDownloadingRef = useRef(false);
   const refresh = useDownloadsStore((s) => s.refresh);
   const { settings, load: loadSettings } = useSettingsStore();
   const setActiveTab = useUiStore((s) => s.setActiveTab);
@@ -81,7 +87,8 @@ export function SocialPage() {
 
   async function handleExtract(e: React.FormEvent) {
     e.preventDefault();
-    if (!url.trim()) return;
+    if (isExtractingRef.current || loading || !url.trim()) return;
+    isExtractingRef.current = true;
     setLoading(true); setError(null); setInfo(null);
     setSelectedPhotoIds(new Set());
     try {
@@ -106,21 +113,34 @@ export function SocialPage() {
       }
     } finally {
       setLoading(false);
+      isExtractingRef.current = false;
     }
   }
 
-  async function handleDownload(format: MediaFormatOption) {
+  async function handleDownload(format: MediaFormatOption, allowDuplicate = false) {
     if (downloadingIds.has(format.id)) return;
     setDownloadingIds((prev) => new Set(prev).add(format.id));
     try {
-      await ipc.invoke("social:download", { url: url.trim(), format, saveDir: customDir || undefined });
+      await ipc.invoke("social:download", {
+        url: url.trim(),
+        format,
+        saveDir: customDir || undefined,
+        allowDuplicate,
+      });
       await refresh();
       showToast(
         `Started downloading "${info?.title || "media"}" in ${format.label}`,
         "success", 4000,
       );
       setTimeout(() => setActiveTab("downloads"), 1500);
-    } catch (err) {
+    } catch (err: any) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      if (errorMsg.includes("DUPLICATE_URL")) {
+        const parts = errorMsg.split(":");
+        const dupFilename = parts[2] || info?.title || "media";
+        setDuplicateItem({ url: url.trim(), format, filename: dupFilename });
+        return;
+      }
       showToast(err instanceof Error ? err.message : "Failed to start download", "error");
     } finally {
       setDownloadingIds((prev) => { const next = new Set(prev); next.delete(format.id); return next; });
@@ -751,6 +771,29 @@ export function SocialPage() {
             </div>
           )}
         </Card>
+      )}
+
+      {schedulingFormat && (
+        <ScheduleModal
+          open={!!schedulingFormat}
+          onCancel={() => setSchedulingFormat(null)}
+          onConfirm={(scheduledFor: string) => void handleSchedule(schedulingFormat, scheduledFor)}
+          title={`Schedule ${schedulingFormat.label}`}
+        />
+      )}
+
+      {duplicateItem && (
+        <DuplicateDownloadModal
+          isOpen={!!duplicateItem}
+          url={duplicateItem.url}
+          filename={duplicateItem.filename}
+          onConfirm={() => {
+            const item = duplicateItem;
+            setDuplicateItem(null);
+            void handleDownload(item.format, true);
+          }}
+          onCancel={() => setDuplicateItem(null)}
+        />
       )}
     </div>
   );

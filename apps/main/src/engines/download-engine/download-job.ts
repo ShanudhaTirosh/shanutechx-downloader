@@ -110,6 +110,11 @@ export class DownloadJob {
 
       events.onStatus("merging");
       this.finalFilepath = await reserveUniqueFilepath(this.saveDir, this.filename);
+      const uniqueName = path.basename(this.finalFilepath);
+      if (uniqueName !== this.filename) {
+        this.filename = uniqueName;
+        events.onResolved(this.filename, this.sizeBytes, this.segments.length);
+      }
       await this.mergeSegments();
       await this.cleanupTemp();
 

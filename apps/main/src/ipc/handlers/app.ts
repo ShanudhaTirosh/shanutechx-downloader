@@ -113,44 +113,52 @@ export async function checkGitHubRelease(): Promise<{
   }
 }
 
+function getTargetWindow(): BrowserWindow | null {
+  return BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || null;
+}
+
 export function registerAppHandlers(): void {
   registerHandler("app:getVersion", () => ({ version: APP_VERSION }));
   registerHandler("app:getPlatform", () => ({ platform: process.platform }));
   
   registerHandler("app:minimize", () => {
-    const win = BrowserWindow.getFocusedWindow();
+    const win = getTargetWindow();
     if (win) win.minimize();
   });
   
   registerHandler("app:maximize", () => {
-    const win = BrowserWindow.getFocusedWindow();
+    const win = getTargetWindow();
     if (win) win.maximize();
   });
   
   registerHandler("app:unmaximize", () => {
-    const win = BrowserWindow.getFocusedWindow();
+    const win = getTargetWindow();
     if (win) win.unmaximize();
   });
   
   registerHandler("app:close", () => {
-    const win = BrowserWindow.getFocusedWindow();
+    const win = getTargetWindow();
     if (win) win.close();
   });
   
   registerHandler("app:isMaximized", () => {
-    const win = BrowserWindow.getFocusedWindow();
+    const win = getTargetWindow();
     return { maximized: win?.isMaximized() ?? false };
   });
   
   registerHandler("app:selectFile", async (req) => {
-    const win = BrowserWindow.getFocusedWindow();
-    if (!win) return { filePath: null };
-    
-    const result = await dialog.showOpenDialog(win, {
-      title: req.title ?? "Select File",
-      filters: req.filters ?? [],
-      properties: ["openFile"],
-    });
+    const win = getTargetWindow();
+    const result = win
+      ? await dialog.showOpenDialog(win, {
+          title: req.title ?? "Select File",
+          filters: req.filters ?? [],
+          properties: ["openFile"],
+        })
+      : await dialog.showOpenDialog({
+          title: req.title ?? "Select File",
+          filters: req.filters ?? [],
+          properties: ["openFile"],
+        });
     
     return { filePath: result.canceled ? null : result.filePaths[0] ?? null };
   });
@@ -294,7 +302,7 @@ export function registerAppHandlers(): void {
   });
 
   registerHandler("app:selectDirectory", async (req) => {
-    const win = BrowserWindow.getFocusedWindow();
+    const win = getTargetWindow();
     const result = win
       ? await dialog.showOpenDialog(win, {
           title: req.title ?? "Select Folder",

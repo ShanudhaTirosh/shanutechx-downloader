@@ -8,6 +8,7 @@ import { useToast } from "../ui/Toast";
 import { useUiStore } from "../../stores/uiStore";
 import { shake, shakeKeyframes } from "../../lib/motion";
 import { ScheduleModal } from "./ScheduleModal";
+import { DuplicateDownloadModal } from "./DuplicateDownloadModal";
 import { ipc } from "../../lib/ipc-client";
 
 // Common video/social media domains that should use Social Grab instead
@@ -43,7 +44,15 @@ export function AddUrlBar() {
   const [submitting, setSubmitting] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [duplicateModal, setDuplicateModal] = useState<{
+    open: boolean;
+    url: string;
+    filename?: string;
+    isSchedule?: boolean;
+    scheduledFor?: string;
+  } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const isSubmittingRef = useRef(false);
   const addUrl = useDownloadsStore((s) => s.addUrl);
   const refresh = useDownloadsStore((s) => s.refresh);
   const { showToast } = useToast();
@@ -135,14 +144,9 @@ export function AddUrlBar() {
       const message = error instanceof Error ? error.message : "Failed to add download";
       const duplicateMatch = /^DUPLICATE_URL:/.exec(message);
       if (duplicateMatch) {
-        // A blocking confirm() here (rather than a toast-only warning) is
-        // deliberate — this is a decision the person needs to make before
-        // anything happens, not a fire-and-forget notification.
-        const proceed = confirm("You've already downloaded (or are downloading) this URL. Add another copy anyway?");
-        if (proceed) {
-          await submit(targetUrl, true);
-          return;
-        }
+        const parts = message.split(":");
+        const filename = parts.slice(2).join(":") || undefined;
+        setDuplicateModal({ open: true, url: targetUrl, filename });
         return;
       }
       triggerShake();
@@ -152,12 +156,12 @@ export function AddUrlBar() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!url.trim() || submitting) return;
+    if (!url.trim() || isSubmittingRef.current || submitting) return;
 
     if (isSocialMediaUrl(url.trim())) {
       triggerShake();
       showToast(
-        "This looks like a video platform URL. Please use the Social Grab tab for YouTube, TikTok, Instagram, Pornhub, and other video sites.",
+        "This looks like a video platform URL. Please use the Social Grab tab for YouTube, TikTok, Instagram, and other video sites.",
         "error",
         6000
       );
@@ -165,9 +169,14 @@ export function AddUrlBar() {
       return;
     }
 
+    isSubmittingRef.current = true;
     setSubmitting(true);
-    await submit(url.trim());
-    setSubmitting(false);
+    try {
+      await submit(url.trim());
+    } finally {
+      setSubmitting(false);
+      setTimeout(() => { isSubmittingRef.current = false; }, 350);
+    }
   }
 
   async function handleSchedule(scheduledFor: string) {
@@ -188,14 +197,9 @@ export function AddUrlBar() {
       const message = err instanceof Error ? err.message : "Failed to schedule";
       const dup = /^DUPLICATE_URL:/.exec(message);
       if (dup) {
-        const proceed = confirm("You've already downloaded this URL. Schedule another copy?");
-        if (proceed) {
-          await ipc.invoke("downloads:scheduleNew", { url: trimmed, scheduledFor, allowDuplicate: true });
-          await refresh();
-          setUrl("");
-          const when = new Date(scheduledFor).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
-          showToast(`Scheduled for ${when}`, "success", 5000);
-        }
+        const parts = message.split(":");
+        const filename = parts.slice(2).join(":") || undefined;
+        setDuplicateModal({ open: true, url: trimmed, filename, isSchedule: true, scheduledFor });
         return;
       }
       showToast(message, "error");
@@ -209,6 +213,25 @@ export function AddUrlBar() {
         title="Schedule Download"
         onConfirm={handleSchedule}
         onCancel={() => setScheduleOpen(false)}
+      />
+      <DuplicateDownloadModal
+        isOpen={Boolean(duplicateModal?.open)}
+        url={duplicateModal?.url || ""}
+        filename={duplicateModal?.filename}
+        onConfirm={async () => {
+          if (!duplicateModal) return;
+          const { url: dupUrl, isSchedule, scheduledFor: dupScheduledFor } = duplicateModal;
+          setDuplicateModal(null);
+          if (isSchedule && dupScheduledFor) {
+            await ipc.invoke("downloads:scheduleNew", { url: dupUrl, scheduledFor: dupScheduledFor, allowDuplicate: true });
+            await refresh();
+            setUrl("");
+            showToast("Scheduled duplicate copy successfully!", "success");
+          } else {
+            await submit(dupUrl, true);
+          }
+        }}
+        onCancel={() => setDuplicateModal(null)}
       />
       <motion.form
         onSubmit={handleSubmit}

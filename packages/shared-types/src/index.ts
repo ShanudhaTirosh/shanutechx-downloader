@@ -216,7 +216,7 @@ export interface IpcInvokeMap {
   "settings:clearProxyCredentials": { req: void; res: void };
 
   "social:extract": { req: { url: string }; res: MediaInfo };
-  "social:download": { req: { url: string; format: MediaFormatOption; saveDir?: string }; res: { id: string } };
+  "social:download": { req: { url: string; format: MediaFormatOption; saveDir?: string; allowDuplicate?: boolean }; res: { id: string } };
   "social:pause": { req: { id: string }; res: void };
   "social:resume": { req: { id: string }; res: void };
   "social:cancel": { req: { id: string }; res: void };

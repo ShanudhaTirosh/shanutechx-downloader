@@ -136,7 +136,7 @@ export class QueueManager {
   start(url: string, saveDirOverride?: string, allowDuplicate?: boolean): { id: string } {
     if (!allowDuplicate) {
       const existing = downloadsRepo.findActiveOrCompleteByUrl(url);
-      if (existing) throw new Error(`DUPLICATE_URL:${existing.id}`);
+      if (existing) throw new Error(`DUPLICATE_URL:${existing.id}:${existing.filename || url}`);
     }
     const settings = settingsStore.get();
     const id = randomUUID();
@@ -257,14 +257,32 @@ export class QueueManager {
     }
   }
 
-  pause(id: string): void { this.autoPausedIds.delete(id); this.active.get(id)?.job.pause(); downloadsRepo.updateStatus(id, "paused"); }
-  resume(id: string): void { this.autoPausedIds.delete(id); this.active.get(id)?.job.resume(); downloadsRepo.updateStatus(id, "downloading"); }
+  pause(id: string): void {
+    this.autoPausedIds.delete(id);
+    this.active.get(id)?.job.pause();
+    downloadsRepo.updateStatus(id, "paused");
+    this.broadcastStatus(id, "paused");
+  }
+
+  resume(id: string): void {
+    this.autoPausedIds.delete(id);
+    this.active.get(id)?.job.resume();
+    downloadsRepo.updateStatus(id, "downloading");
+    this.broadcastStatus(id, "downloading");
+  }
+
   cancel(id: string): void {
     this.autoPausedIds.delete(id);
     const entry = this.active.get(id);
-    if (entry) { entry.job.cancel(); return; }
+    if (entry) {
+      entry.job.cancel();
+      downloadsRepo.updateStatus(id, "cancelled");
+      this.broadcastStatus(id, "cancelled");
+      return;
+    }
     this.queued = this.queued.filter((qid) => qid !== id);
     downloadsRepo.updateStatus(id, "cancelled");
+    this.broadcastStatus(id, "cancelled");
   }
 
   /** Called from the shutdown state machine's "pausing-active-transfers" phase. */
