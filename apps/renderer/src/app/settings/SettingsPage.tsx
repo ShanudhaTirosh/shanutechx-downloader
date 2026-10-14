@@ -605,9 +605,7 @@ export function SettingsPage() {
             </select>
           </label>
           <p className="text-xs text-zinc-600 -mt-2">
-            Fixes <span className="text-zinc-400">“Sign in to confirm you’re not a bot”</span> on YouTube.
-            The selected browser must be open and logged in. Cookies are never stored by this app — they are read
-            directly from the browser’s local cookie database by yt-dlp each time a download starts.
+            Useful for age-restricted or private videos. If the browser database is locked or inaccessible while open, the app automatically falls back to direct download without cookies so downloads never fail.
           </p>
         </div>
       </Card>

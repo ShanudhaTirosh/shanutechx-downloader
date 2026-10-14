@@ -43,6 +43,51 @@ interface YtDlpFlatInfo {
   formats?: YtDlpFormat[];
 }
 
+function isYouTubeUrl(url: string): boolean {
+  return /(?:youtube\.com|youtu\.be)/i.test(url);
+}
+
+function isCookieError(errStr: string): boolean {
+  const lower = errStr.toLowerCase();
+  return (
+    lower.includes("could not copy") ||
+    lower.includes("cookie") ||
+    lower.includes("dpapi") ||
+    lower.includes("database is locked") ||
+    lower.includes("sharing violation") ||
+    lower.includes("permission denied")
+  );
+}
+
+function is403Forbidden(errStr: string): boolean {
+  const lower = errStr.toLowerCase();
+  return lower.includes("403") || lower.includes("forbidden");
+}
+
+function buildExtractArgs(
+  url: string,
+  ignoreCertificateErrors: boolean,
+  cookiesFromBrowser?: string,
+  playerClient = "web_embedded,web,android",
+  bypassCache = false
+): string[] {
+  const args = ["--dump-json", "--no-warnings", "--socket-timeout", "30"];
+  if (bypassCache) {
+    args.push("--no-cache-dir");
+  }
+  if (ignoreCertificateErrors) {
+    args.push("--no-check-certificate");
+  }
+  if (isYouTubeUrl(url)) {
+    args.push("--extractor-args", `youtube:player-client=${playerClient}`);
+  }
+  if (cookiesFromBrowser && cookiesFromBrowser.trim()) {
+    args.push("--cookies-from-browser", cookiesFromBrowser.trim());
+  }
+  args.push(url);
+  return args;
+}
+
 /**
  * Always invokes yt-dlp with an ARGUMENT ARRAY via execa — never a shell
  * string. This is the direct fix for the old app's implicit shell-invocation
@@ -55,19 +100,59 @@ export async function extractMediaInfo(
   ignoreCertificateErrors: boolean,
   cookiesFromBrowser?: string,
 ): Promise<MediaInfo> {
-  const args = ["--dump-json", "--no-warnings", "--socket-timeout", "25"];
-  if (ignoreCertificateErrors) args.push("--no-check-certificate");
-  if (cookiesFromBrowser && cookiesFromBrowser.trim()) {
-    args.push("--cookies-from-browser", cookiesFromBrowser.trim());
-  }
-  args.push(url);
+  let stdout = "";
+  let useCookies = Boolean(cookiesFromBrowser && cookiesFromBrowser.trim());
+  let currentClient = "web_embedded,web,android";
+  let bypassCache = false;
 
-  const { promise } = runProcess(ytDlpPath, args, { timeoutMs: 35_000 });
-  const { stdout } = await promise;
-  
+  const runWithArgs = async (cookieBrowser?: string, client = currentClient, noCache = bypassCache) => {
+    const args = buildExtractArgs(url, ignoreCertificateErrors, cookieBrowser, client, noCache);
+    const { promise } = runProcess(ytDlpPath, args, { timeoutMs: 35_000 });
+    return await promise;
+  };
+
+  try {
+    const res = await runWithArgs(useCookies ? cookiesFromBrowser : undefined, currentClient, bypassCache);
+    stdout = res.stdout;
+  } catch (err: any) {
+    const errText = `${err?.message ?? ""} ${err?.stderr ?? ""}`;
+    console.warn(`[social-extractor] Primary extract failed for ${url}: ${errText.slice(0, 200)}...`);
+
+    // Auto-recovery 1: Browser cookie database locked or unreadable (Chrome running or DPAPI)
+    if (useCookies && isCookieError(errText)) {
+      console.info("[social-extractor] Browser cookie database locked or unreadable; retrying extraction without browser cookies...");
+      useCookies = false;
+      try {
+        const res = await runWithArgs(undefined, currentClient, bypassCache);
+        stdout = res.stdout;
+      } catch (err2: any) {
+        const err2Text = `${err2?.message ?? ""} ${err2?.stderr ?? ""}`;
+        if (isYouTubeUrl(url) && (is403Forbidden(err2Text) || is403Forbidden(errText))) {
+          console.info("[social-extractor] Retrying YouTube extraction with fallback client (ios,android,web)...");
+          currentClient = "ios,android,web";
+          bypassCache = true;
+          const res = await runWithArgs(undefined, currentClient, bypassCache);
+          stdout = res.stdout;
+        } else {
+          throw err2;
+        }
+      }
+    } else if (isYouTubeUrl(url) && is403Forbidden(errText)) {
+      // Auto-recovery 2: 403 Forbidden on YouTube streams
+      console.info("[social-extractor] Retrying YouTube extraction with fallback client (ios,android,web)...");
+      currentClient = "ios,android,web";
+      bypassCache = true;
+      const res = await runWithArgs(useCookies ? cookiesFromBrowser : undefined, currentClient, bypassCache);
+      stdout = res.stdout;
+    } else {
+      throw err;
+    }
+  }
+
   // yt-dlp might output multiple JSON lines for playlists or single JSON for single items
-  const firstJsonLine = stdout.trim().split("\n")[0] ?? "{}";
-  const info: YtDlpFlatInfo = JSON.parse(firstJsonLine);
+  const lines = stdout.trim().split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const jsonLine = lines.find((l) => l.startsWith("{") && l.endsWith("}")) ?? lines[0] ?? "{}";
+  const info: YtDlpFlatInfo = JSON.parse(jsonLine);
 
   // 1. Video formats
   const videoFormats = (info.formats ?? [])

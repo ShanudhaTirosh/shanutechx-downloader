@@ -80,6 +80,12 @@ export class SocialDownloadJob {
   private lastProgressSampleTime = 0;
   private lastProgressSampleBytes = 0;
 
+  private useCookies: boolean;
+  private playerClient = "web_embedded,web,android";
+  private bypassCache = false;
+  private retriedForbidden = false;
+  private retriedCookie = false;
+
   constructor(
     private id: string,
     private url: string,
@@ -94,7 +100,9 @@ export class SocialDownloadJob {
     private audioFormat?: string,
     private audioQuality?: string,
     private ffmpegPath?: string,
-  ) {}
+  ) {
+    this.useCookies = Boolean(this.cookiesFromBrowser && this.cookiesFromBrowser.trim());
+  }
 
   cancel(): void {
     this.cancelled = true;
@@ -133,14 +141,27 @@ export class SocialDownloadJob {
 
   private async runInternal(events: SocialDownloadEvents, isContinue: boolean): Promise<void> {
     const outputTemplate = path.join(this.saveDir, "%(title).150B [%(id)s].%(ext)s");
+    const isYouTube = /(?:youtube\.com|youtu\.be)/i.test(this.url);
+
     const args = [
       "-f", this.formatSelector,
       "--newline",
       "--no-warnings",
       "--restrict-filenames", "--windows-filenames",
       "--concurrent-fragments", "5",
+      "--socket-timeout", "30",
+      "--retries", "5",
+      "--fragment-retries", "10",
       "-o", outputTemplate,
     ];
+
+    if (this.bypassCache) {
+      args.push("--no-cache-dir");
+    }
+
+    if (isYouTube) {
+      args.push("--extractor-args", `youtube:player-client=${this.playerClient}`);
+    }
 
     // Configure FFmpeg location for stream muxing and audio postprocessing
     if (this.ffmpegPath) {
@@ -158,15 +179,17 @@ export class SocialDownloadJob {
       }
     }
 
-    // Use yt-dlp's built-in resume capability when restarting after a pause.
+    // Use yt-dlp's built-in resume capability when restarting after a pause or retry.
     if (isContinue) args.push("--continue");
     if (this.ignoreCertificateErrors) args.push("--no-check-certificate");
     if (this.autoEmbedThumbnail) args.push("--embed-thumbnail");
     if (this.subtitleLanguages.trim()) {
       args.push("--write-subs", "--embed-subs", "--sub-langs", this.subtitleLanguages.trim());
     }
-    // Pass browser cookies when configured — fixes YouTube bot-detection errors.
-    if (this.cookiesFromBrowser.trim()) args.push("--cookies-from-browser", this.cookiesFromBrowser.trim());
+    // Pass browser cookies when configured and not locked/disabled
+    if (this.useCookies && this.cookiesFromBrowser.trim()) {
+      args.push("--cookies-from-browser", this.cookiesFromBrowser.trim());
+    }
     args.push(this.url);
 
     events.onStatus("downloading");
@@ -229,7 +252,7 @@ export class SocialDownloadJob {
       }
       if (this.lastKnownSizeBytes !== null) events.onProgress(this.lastKnownSizeBytes, this.lastKnownSizeBytes);
       events.onStatus("complete");
-    } catch (err) {
+    } catch (err: any) {
       if (this.isPaused) {
         // SIGTERM from pause() causes a non-zero exit which runProcess wraps
         // as an Error — but it's a deliberate pause, not a failure.
@@ -238,9 +261,40 @@ export class SocialDownloadJob {
       }
       if (this.cancelled) {
         events.onStatus("cancelled");
-      } else {
-        events.onStatus("failed", err instanceof Error ? err.message : String(err));
+        return;
       }
+
+      const errText = `${err?.message ?? ""} ${err?.stderr ?? ""}`;
+      const isCookieErr =
+        errText.toLowerCase().includes("could not copy") ||
+        errText.toLowerCase().includes("cookie") ||
+        errText.toLowerCase().includes("dpapi") ||
+        errText.toLowerCase().includes("database is locked") ||
+        errText.toLowerCase().includes("sharing violation") ||
+        errText.toLowerCase().includes("permission denied");
+
+      const isForbidden =
+        errText.toLowerCase().includes("403") ||
+        errText.toLowerCase().includes("forbidden");
+
+      // Auto-recovery 1: Cookie database locked / unreadable (Chrome running or DPAPI)
+      if (this.useCookies && !this.retriedCookie && isCookieErr) {
+        console.warn(`[social-job:${this.id}] Cookie database locked or inaccessible (${errText.slice(0, 160)}). Retrying download without browser cookies...`);
+        this.retriedCookie = true;
+        this.useCookies = false;
+        return await this.runInternal(events, true);
+      }
+
+      // Auto-recovery 2: 403 Forbidden on stream data (YouTube SABR anti-bot or token block)
+      if (isYouTube && !this.retriedForbidden && isForbidden) {
+        console.warn(`[social-job:${this.id}] Encountered 403 Forbidden on video data. Retrying with fallback player client (ios,android,web)...`);
+        this.retriedForbidden = true;
+        this.playerClient = "ios,android,web";
+        this.bypassCache = true;
+        return await this.runInternal(events, true);
+      }
+
+      events.onStatus("failed", err instanceof Error ? err.message : String(err));
     }
   }
 
