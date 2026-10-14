@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { ipc } from "../../lib/ipc-client";
 
 function formatSpeed(bps: number): string {
@@ -36,8 +37,12 @@ export function StatusBar() {
 
   return (
     <div className="h-7 flex items-center gap-4 px-4 text-[11px] text-zinc-500 border-t border-surface-border">
-      <span className={downBps > 0 ? "text-emerald-400" : ""}>↓ {formatSpeed(downBps)}</span>
-      <span className={upBps > 0 ? "text-sky-400" : ""}>↑ {formatSpeed(upBps)}</span>
+      <span className={`inline-flex items-center gap-0.5 ${downBps > 0 ? "text-emerald-400 font-medium" : ""}`}>
+        <ArrowDown size={11} /> {formatSpeed(downBps)}
+      </span>
+      <span className={`inline-flex items-center gap-0.5 ${upBps > 0 ? "text-sky-400 font-medium" : ""}`}>
+        <ArrowUp size={11} /> {formatSpeed(upBps)}
+      </span>
       <span className="text-zinc-700">|</span>
       <span className={activeCount > 0 ? "text-zinc-300" : ""}>{activeCount} active</span>
       <span className="flex-1" />

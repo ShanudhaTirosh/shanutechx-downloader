@@ -12,7 +12,7 @@ app.setName("SHANUTECHX Downloader");
 import { createMainWindow } from "./window";
 import { enforceSingleInstance } from "./single-instance";
 import { registerAllHandlers } from "./ipc/handlers";
-import { initializeAutoUpdater } from "./ipc/handlers/app";
+import { initializeAutoUpdater, checkStartupUpdates } from "./ipc/handlers/app";
 import { runShutdownSequence, type ShutdownStep } from "./shutdown";
 import { getDb, closeDb } from "./db/client";
 import { settingsStore, onSettingsChange } from "./settings/settings-store";
@@ -30,14 +30,39 @@ let mainWindow: BrowserWindow | null = null;
 let queueManager: QueueManager | null = null;
 let torrentEngine: TorrentEngine | null = null;
 
-const isPrimaryInstance = enforceSingleInstance(() => {
+function handleProtocolUrl(urlStr: string) {
+  try {
+    if (!urlStr || !urlStr.startsWith("shanutechx://")) return;
+    log.info("Received protocol url:", urlStr);
+    const parsed = new URL(urlStr);
+    const downloadUrl = parsed.searchParams.get("url");
+    if (downloadUrl && queueManager) {
+      log.info("Queueing download from browser extension / protocol:", downloadUrl);
+      try {
+        queueManager.start(downloadUrl, undefined, true);
+      } catch (e) {
+        log.warn("Could not start protocol download:", e);
+      }
+    }
+  } catch (err) {
+    log.error("Failed to parse protocol url:", err);
+  }
+}
+
+const isPrimaryInstance = enforceSingleInstance((argv) => {
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
   }
+  const protocolUrl = argv.find((arg) => arg.startsWith("shanutechx://"));
+  if (protocolUrl) {
+    handleProtocolUrl(protocolUrl);
+  }
 });
 
 if (isPrimaryInstance) {
+  app.setAsDefaultProtocolClient("shanutechx");
+
   app.whenReady().then(async () => {
     Menu.setApplicationMenu(null); // custom title bar owns the app chrome
 
@@ -62,6 +87,17 @@ if (isPrimaryInstance) {
     registerAllHandlers(queueManager, socialManager, torrentEngine, converterManager);
 
     mainWindow = createMainWindow();
+
+    // Check if launched directly with protocol URL
+    const initialProtocol = process.argv.find((arg) => arg.startsWith("shanutechx://"));
+    if (initialProtocol) {
+      handleProtocolUrl(initialProtocol);
+    }
+
+    app.on("open-url", (event, url) => {
+      event.preventDefault();
+      handleProtocolUrl(url);
+    });
     
     // Initialize binaries (yt-dlp, ffmpeg, ffprobe) after window is created
     // so we can send progress updates
@@ -82,6 +118,7 @@ if (isPrimaryInstance) {
 
     // Initialize auto-updater for GitHub releases
     initializeAutoUpdater();
+    void checkStartupUpdates(mainWindow);
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) mainWindow = createMainWindow();

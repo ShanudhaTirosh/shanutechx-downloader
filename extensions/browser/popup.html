@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SHANUTECHX Downloader</title>
+  <style>
+    body {
+      width: 280px;
+      margin: 0;
+      padding: 14px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f0f14;
+      color: #e4e4e7;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .logo {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      background: linear-gradient(135deg, #a855f7, #6366f1);
+    }
+    h1 {
+      font-size: 13px;
+      font-weight: 600;
+      margin: 0;
+      color: #f4f4f5;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 8px 12px;
+      background: #7c3aed;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-bottom: 8px;
+      transition: background 0.15s;
+    }
+    .btn:hover {
+      background: #6d28d9;
+    }
+    .status {
+      font-size: 11px;
+      color: #a1a1aa;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo"></div>
+    <h1>SHANUTECHX Downloader</h1>
+  </div>
+  <button id="downloadCurrentBtn" class="btn">Download Current Tab URL</button>
+  <p id="statusMsg" class="status">Click to send to desktop app</p>
+  <script src="popup.js"></script>
+</body>
+</html>

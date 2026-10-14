@@ -17,8 +17,13 @@ export function createMainWindow(): BrowserWindow {
     minHeight: 640,
     backgroundColor: "#0a0a0f", // matches surface.base — avoids a white flash on launch
     show: false,
-    frame: false, // custom title bar, see components/layout/TitleBar.tsx
+    frame: false, // custom title bar with native controls overlay on Windows
     titleBarStyle: "hidden",
+    titleBarOverlay: process.platform === "win32" ? {
+      color: "#0a0a0f",
+      symbolColor: "#a1a1aa",
+      height: 38,
+    } : false,
     icon: iconPath, // Set window icon
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),

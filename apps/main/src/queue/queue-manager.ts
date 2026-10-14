@@ -279,14 +279,14 @@ export class QueueManager {
     const win = this.getWindow();
     const now = Date.now();
 
-    // Real instantaneous speed: bytes advanced since the last sample for
-    // THIS download, divided by elapsed time — not a placeholder.
     const prev = this.lastSample.get(id);
     let speedBps = this.currentSpeeds.get(id) ?? 0;
     if (prev) {
       const elapsedSec = (now - prev.time) / 1000;
-      if (elapsedSec > 0.05) { // ignore near-zero intervals — avoids divide-by-tiny-number spikes
-        speedBps = Math.max(0, (downloadedBytes - prev.bytes) / elapsedSec);
+      if (elapsedSec > 0.08) {
+        const instantSpeed = Math.max(0, (downloadedBytes - prev.bytes) / elapsedSec);
+        // Exponential moving average for jitter-free, accurate speed readout
+        speedBps = speedBps > 0 ? Math.round(speedBps * 0.65 + instantSpeed * 0.35) : Math.round(instantSpeed);
         this.currentSpeeds.set(id, speedBps);
         this.lastSample.set(id, { bytes: downloadedBytes, time: now });
       }
@@ -294,11 +294,11 @@ export class QueueManager {
       this.lastSample.set(id, { bytes: downloadedBytes, time: now });
     }
 
-    // Calculate ETA: remaining bytes divided by current speed
+    // Accurate ETA calculation
     let etaSec: number | null = null;
-    if (sizeBytes && speedBps > 0) {
+    if (sizeBytes && sizeBytes > downloadedBytes && speedBps > 512) {
       const remainingBytes = sizeBytes - downloadedBytes;
-      etaSec = Math.max(0, remainingBytes / speedBps);
+      etaSec = Math.max(0, Math.round(remainingBytes / speedBps));
     }
 
     win?.webContents.send("download:progress", { id, downloadedBytes, totalBytes: sizeBytes, speedBps, etaSec });

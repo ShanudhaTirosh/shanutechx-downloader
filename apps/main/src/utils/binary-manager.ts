@@ -197,12 +197,53 @@ async function extractZip(zipPath: string, outputPath: string, binaryName: strin
 /**
  * Check if a binary exists and is executable
  */
-function binaryExists(binaryPath: string): boolean {
+export function binaryExists(binaryPath: string): boolean {
   try {
     return fs.existsSync(binaryPath) && fs.statSync(binaryPath).isFile();
   } catch {
     return false;
   }
+}
+
+/**
+ * Resolves a binary path by checking:
+ * 1. The application's userData binaries folder
+ * 2. System PATH
+ * 3. Known standard system installation paths
+ */
+function resolveSystemBinary(name: string, defaultPath: string): string {
+  if (binaryExists(defaultPath)) {
+    return defaultPath;
+  }
+
+  const isWin = process.platform === "win32";
+  const binaryFilename = isWin ? `${name}.exe` : name;
+
+  const pathEnv = process.env.PATH || "";
+  const pathDirs = pathEnv.split(path.delimiter);
+  for (const dir of pathDirs) {
+    if (!dir) continue;
+    const candidate = path.join(dir, binaryFilename);
+    if (binaryExists(candidate)) {
+      return candidate;
+    }
+  }
+
+  if (isWin) {
+    const localAppData = process.env.LOCALAPPDATA || "";
+    const programFiles = process.env.ProgramFiles || "C:\\Program Files";
+    const candidates = [
+      path.join(localAppData, "Microsoft", "WinGet", "Links", binaryFilename),
+      `C:\\ffmpeg\\bin\\${binaryFilename}`,
+      `C:\\Program Files\\ffmpeg\\bin\\${binaryFilename}`,
+      path.join(programFiles, "ffmpeg", "bin", binaryFilename),
+    ];
+    for (const c of candidates) {
+      if (binaryExists(c)) return c;
+    }
+  }
+
+  return defaultPath;
 }
 
 /**
@@ -220,10 +261,11 @@ export function getMissingBinaries(): {
   ffmpeg: boolean;
   ffprobe: boolean;
 } {
+  const paths = getBinaryPaths();
   return {
-    ytdlp: !binaryExists(YTDLP_PATH),
-    ffmpeg: !binaryExists(FFMPEG_PATH),
-    ffprobe: !binaryExists(FFPROBE_PATH),
+    ytdlp: !binaryExists(paths.ytdlp),
+    ffmpeg: !binaryExists(paths.ffmpeg),
+    ffprobe: !binaryExists(paths.ffprobe),
   };
 }
 
@@ -410,28 +452,115 @@ export function getBinaryPaths(): {
   ffprobe: string;
 } {
   return {
-    ytdlp: YTDLP_PATH,
-    ffmpeg: FFMPEG_PATH,
-    ffprobe: FFPROBE_PATH,
+    ytdlp: resolveSystemBinary("yt-dlp", YTDLP_PATH),
+    ffmpeg: resolveSystemBinary("ffmpeg", FFMPEG_PATH),
+    ffprobe: resolveSystemBinary("ffprobe", FFPROBE_PATH),
   };
 }
 
 /**
- * Initialize binaries on app start - download if missing
+ * Ensure yt-dlp binary specifically is downloaded straight away if missing,
+ * returning its confirmed path. Deduplicates concurrent download requests.
+ */
+let ytDlpDownloadPromise: Promise<string> | null = null;
+
+export async function ensureYtDlpBinary(onProgress?: ProgressCallback): Promise<string> {
+  const currentPath = resolveSystemBinary("yt-dlp", YTDLP_PATH);
+  if (binaryExists(currentPath)) {
+    return currentPath;
+  }
+
+  if (ytDlpDownloadPromise) {
+    return ytDlpDownloadPromise;
+  }
+
+  ytDlpDownloadPromise = (async () => {
+    try {
+      await ensureBinariesDir();
+      const urls = getBinaryUrls();
+      console.log(`yt-dlp is missing. Downloading directly from ${urls.ytdlp} straight away...`);
+      await downloadBinary(urls.ytdlp, YTDLP_PATH, "yt-dlp", onProgress);
+      console.log(`yt-dlp downloaded and ready at ${YTDLP_PATH}`);
+      return YTDLP_PATH;
+    } finally {
+      ytDlpDownloadPromise = null;
+    }
+  })();
+
+  return ytDlpDownloadPromise;
+}
+
+/**
+  * Ensure ffmpeg binary specifically is available straight away, downloading
+  * missing bundles if required. Deduplicates concurrent requests.
+  */
+let ffmpegDownloadPromise: Promise<string> | null = null;
+
+export async function ensureFfmpegBinary(onProgress?: ProgressCallback): Promise<string> {
+  const currentPath = resolveSystemBinary("ffmpeg", FFMPEG_PATH);
+  if (binaryExists(currentPath)) {
+    return currentPath;
+  }
+
+  if (ffmpegDownloadPromise) {
+    return ffmpegDownloadPromise;
+  }
+
+  ffmpegDownloadPromise = (async () => {
+    try {
+      await ensureBinariesDir();
+      const urls = getBinaryUrls();
+      console.log(`ffmpeg is missing. Downloading directly from ${urls.ffmpeg}...`);
+      if (process.platform === "win32") {
+        await downloadAndExtractFFmpegBundle(urls.ffmpeg, onProgress);
+      } else {
+        await downloadBinary(urls.ffmpeg, FFMPEG_PATH, "ffmpeg", onProgress);
+      }
+      const newPath = resolveSystemBinary("ffmpeg", FFMPEG_PATH);
+      if (!binaryExists(newPath)) {
+        throw new Error("FFmpeg binary could not be found or downloaded. Please check internet connection.");
+      }
+      console.log(`ffmpeg ready at ${newPath}`);
+      return newPath;
+    } finally {
+      ffmpegDownloadPromise = null;
+    }
+  })();
+
+  return ffmpegDownloadPromise;
+}
+
+/**
+ * Initialize binaries on app start - detect yt-dlp and ffmpeg, downloading if missing
  */
 export async function initializeBinaries(onProgress?: ProgressCallback): Promise<boolean> {
   try {
     const missing = getMissingBinaries();
-    const hasMissing = missing.ytdlp || missing.ffmpeg || missing.ffprobe;
+    let downloadedAny = false;
 
-    if (hasMissing) {
-      await downloadMissingBinaries(onProgress);
-      return true; // Downloaded binaries
+    // Prioritize yt-dlp: if missing, download it straight away
+    if (missing.ytdlp) {
+      console.log("yt-dlp missing on launch, downloading straight away...");
+      await ensureYtDlpBinary(onProgress).catch((err) => {
+        console.error("Failed to download yt-dlp on launch:", err);
+      });
+      downloadedAny = true;
     }
 
-    return false; // All binaries already present
+    // Next check ffmpeg / ffprobe
+    const stillMissing = getMissingBinaries();
+    if (stillMissing.ffmpeg || stillMissing.ffprobe) {
+      console.log("ffmpeg/ffprobe missing on launch, initiating download in background...");
+      downloadMissingBinaries(onProgress).catch((err) => {
+        console.error("Failed to download ffmpeg/ffprobe on launch:", err);
+      });
+      downloadedAny = true;
+    }
+
+    return downloadedAny;
   } catch (error) {
     console.error("Failed to initialize binaries:", error);
     throw error;
   }
 }
+

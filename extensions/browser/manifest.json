@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "SHANUTECHX Downloader Integration",
+  "version": "1.0.0",
+  "description": "Send videos, audio, and file downloads directly to SHANUTECHX Downloader with one click.",
+  "permissions": [
+    "contextMenus",
+    "activeTab"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Download with SHANUTECHX"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

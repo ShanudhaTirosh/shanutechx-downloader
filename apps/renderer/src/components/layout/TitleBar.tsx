@@ -10,8 +10,16 @@ import { springs } from "../../lib/motion";
  */
 export function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(false);
+  const [isWindows, setIsWindows] = useState(false);
 
   useEffect(() => {
+    // Detect platform
+    ipc.invoke("app:getPlatform", undefined)
+      .then((res) => setIsWindows(res.platform === "win32"))
+      .catch(() => {
+        setIsWindows(navigator.userAgent.includes("Windows"));
+      });
+
     // Get initial maximized state
     ipc.invoke("app:isMaximized", undefined).then((result) => setIsMaximized(result.maximized));
 
@@ -41,42 +49,49 @@ export function TitleBar() {
 
   return (
     <div
-      className="h-10 flex items-center justify-between pl-4 pr-2 select-none border-b border-surface-border"
+      className="h-10 flex items-center justify-between pl-4 pr-2 select-none border-b border-surface-border bg-[#0a0a0f]"
       style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
     >
       <div className="flex items-center gap-2">
         <div className="h-4 w-4 rounded bg-brand-gradient" />
         <span className="text-xs font-semibold tracking-wide text-zinc-300">SHANUTECHX Downloader</span>
       </div>
-      <div className="flex items-center gap-1" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
-        <motion.button
-          onClick={handleMinimize}
-          whileTap={{ scale: 0.9 }}
-          transition={springs.snappy}
-          className="h-7 w-9 flex items-center justify-center rounded-md text-zinc-400 hover:bg-surface-raised-hover hover:text-zinc-100 focus-ring transition-colors"
-          title="Minimize"
-        >
-          <Minus size={13} />
-        </motion.button>
-        <motion.button
-          onClick={handleMaximize}
-          whileTap={{ scale: 0.9 }}
-          transition={springs.snappy}
-          className="h-7 w-9 flex items-center justify-center rounded-md text-zinc-400 hover:bg-surface-raised-hover hover:text-zinc-100 focus-ring transition-colors"
-          title={isMaximized ? "Restore" : "Maximize"}
-        >
-          {isMaximized ? <Minimize2 size={13} /> : <Square size={13} />}
-        </motion.button>
-        <motion.button
-          onClick={handleClose}
-          whileTap={{ scale: 0.9 }}
-          transition={springs.snappy}
-          className="h-7 w-9 flex items-center justify-center rounded-md text-zinc-400 hover:bg-red-600 hover:text-white focus-ring transition-colors"
-          title="Close"
-        >
-          <X size={13} />
-        </motion.button>
-      </div>
+
+      {isWindows ? (
+        // When on Windows, titleBarOverlay renders native Win11 minimize/snap-maximize/close buttons.
+        // We reserve 140px on the right so no draggable elements collide with native controls.
+        <div className="w-[140px] h-full" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties} />
+      ) : (
+        <div className="flex items-center gap-1" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+          <motion.button
+            onClick={handleMinimize}
+            whileTap={{ scale: 0.9 }}
+            transition={springs.snappy}
+            className="h-7 w-9 flex items-center justify-center rounded-md text-zinc-400 hover:bg-surface-raised-hover hover:text-zinc-100 focus-ring transition-colors"
+            title="Minimize"
+          >
+            <Minus size={13} />
+          </motion.button>
+          <motion.button
+            onClick={handleMaximize}
+            whileTap={{ scale: 0.9 }}
+            transition={springs.snappy}
+            className="h-7 w-9 flex items-center justify-center rounded-md text-zinc-400 hover:bg-surface-raised-hover hover:text-zinc-100 focus-ring transition-colors"
+            title={isMaximized ? "Restore" : "Maximize"}
+          >
+            {isMaximized ? <Minimize2 size={13} /> : <Square size={13} />}
+          </motion.button>
+          <motion.button
+            onClick={handleClose}
+            whileTap={{ scale: 0.9 }}
+            transition={springs.snappy}
+            className="h-7 w-9 flex items-center justify-center rounded-md text-zinc-400 hover:bg-red-600 hover:text-white focus-ring transition-colors"
+            title="Close"
+          >
+            <X size={13} />
+          </motion.button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import fsp from "node:fs/promises";
 import type { BrowserWindow } from "electron";
-import { ConverterJob } from "./converter-job";
+import { ConverterJob, type ConvertProgressData } from "./converter-job";
 import { resolveBinaries } from "../social-extractor/binaries";
 import { reserveUniqueFilepath } from "../../utils/filename";
 import { runProcess } from "../../utils/spawn-process";
+import { ensureFfmpegBinary, binaryExists } from "../../utils/binary-manager";
 
 /**
  * Universal FFmpeg-based converter - 100% offline, no API needed
@@ -100,14 +102,17 @@ const HW_ACCEL_ENCODERS = {
   nvenc: {
     h264: "h264_nvenc",
     hevc: "hevc_nvenc",
+    av1: "av1_nvenc",
   },
   qsv: {
     h264: "h264_qsv",
     hevc: "hevc_qsv",
+    av1: "av1_qsv",
   },
   amf: {
     h264: "h264_amf",
     hevc: "hevc_amf",
+    av1: "av1_amf",
   },
 };
 
@@ -128,19 +133,40 @@ export class UniversalConverter {
   constructor(private getWindow: () => BrowserWindow | null) {}
 
   /**
-   * Convert any supported format to another format
+   * Convert any supported format to another format with strict media category validation
    */
   async convert(options: ConversionOptions): Promise<{ taskId: string }> {
     const taskId = randomUUID();
-    const { ffmpeg } = resolveBinaries();
+    let { ffmpeg } = resolveBinaries();
+
+    // Ensure ffmpeg binary is present; download automatically if missing
+    if (!binaryExists(ffmpeg)) {
+      ffmpeg = await ensureFfmpegBinary();
+    }
+
+    // Media type compatibility validation:
+    // Audio can only convert to audio; Image can only convert to image; Video can convert to video, audio, or image
+    const rawInputExt = path.extname(options.inputPath).replace(/^\./, "").toLowerCase();
+    const targetFmt = options.outputFormat.toLowerCase();
+
+    const AUDIO_EXTS = new Set(["mp3", "wav", "flac", "aac", "ogg", "m4a", "wma", "opus", "alac", "aiff"]);
+    const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "webp", "bmp", "gif", "tiff"]);
+    const VIDEO_EXTS = new Set(["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv", "m4v", "3gp", "ogv", "ts", "mpg", "mpeg"]);
+
+    const isInputAudio = AUDIO_EXTS.has(rawInputExt);
+    const isInputImage = IMAGE_EXTS.has(rawInputExt);
+    const isOutputAudio = AUDIO_EXTS.has(targetFmt);
+    const isOutputImage = IMAGE_EXTS.has(targetFmt);
+
+    if (isInputAudio && !isOutputAudio) {
+      throw new Error(`Invalid conversion: Audio files (.${rawInputExt}) can only be converted to audio formats (e.g. MP3, AAC, WAV, FLAC). Converting audio to video or image is not supported.`);
+    }
+
+    if (isInputImage && !isOutputImage) {
+      throw new Error(`Invalid conversion: Image files (.${rawInputExt}) can only be converted to other image formats (e.g. JPG, PNG, WebP). Converting static images to video or audio is not supported.`);
+    }
 
     // Resolve "auto" hardware acceleration to a real, probed encoder choice
-    // (see detectHardwareAcceleration) instead of the old decode-only
-    // `-hwaccel auto` flag that never touched the encoder. Priority follows
-    // typical desktop availability: NVIDIA NVENC first (fastest, most
-    // consistently available across driver versions), then Intel Quick
-    // Sync, then AMD AMF. Falls through to CPU encoding if this ffmpeg
-    // build has none of them.
     let resolvedHwAccel = options.hwAccel;
     if (options.hwAccel === "auto") {
       const available = await detectHardwareAcceleration(ffmpeg);
@@ -151,6 +177,8 @@ export class UniversalConverter {
     const inputExt = path.extname(options.inputPath);
     const inputBase = path.basename(options.inputPath, inputExt);
     const outputDir = options.outputDir || path.dirname(options.inputPath);
+    await fsp.mkdir(outputDir, { recursive: true });
+
     const outputName = `${inputBase}.${options.outputFormat}`;
     const outputPath = await reserveUniqueFilepath(outputDir, outputName);
 
@@ -181,22 +209,28 @@ export class UniversalConverter {
         ffmpegPath: ffmpeg,
       },
       {
-        onProgress: (percent) => {
+        onProgress: (percent, data) => {
           task.progress = percent;
           task.status = "converting";
-          this.notifyProgress(taskId, percent);
+          this.notifyProgress(taskId, percent, data);
         },
         onDone: () => {
           task.status = "complete";
           task.progress = 100;
-          this.notifyStatus(taskId, "complete");
+          this.notifyStatus(taskId, "complete", outputPath);
           this.tasks.delete(taskId);
         },
-        onError: (message) => {
+        onError: async (message) => {
           task.status = "failed";
           task.errorMessage = message;
-          this.notifyStatus(taskId, "failed", message);
+          this.notifyStatus(taskId, "failed", outputPath, message);
           this.tasks.delete(taskId);
+          try {
+            const st = await fsp.stat(outputPath).catch(() => null);
+            if (st && st.size === 0) {
+              await fsp.unlink(outputPath).catch(() => {});
+            }
+          } catch {}
         },
       }
     );
@@ -234,11 +268,13 @@ export class UniversalConverter {
       
       // Apply hardware encoder if requested
       if (options.hwAccel && options.hwAccel !== "none" && options.hwAccel !== "auto") {
-        const hwEncoders = HW_ACCEL_ENCODERS[options.hwAccel];
+        const hwEncoders = HW_ACCEL_ENCODERS[options.hwAccel as keyof typeof HW_ACCEL_ENCODERS];
         if (videoCodec === "libx264") {
           videoCodec = hwEncoders?.h264 || videoCodec;
-        } else if (videoCodec === "libx265") {
+        } else if (videoCodec === "libx265" || videoCodec === "hevc") {
           videoCodec = hwEncoders?.hevc || videoCodec;
+        } else if (videoCodec.includes("av1")) {
+          videoCodec = hwEncoders?.av1 || videoCodec;
         }
       }
       
@@ -247,7 +283,7 @@ export class UniversalConverter {
       // Quality settings
       if (options.quality) {
         const preset = QUALITY_PRESETS[options.quality];
-        if (videoCodec.includes("x264") || videoCodec.includes("x265")) {
+        if (videoCodec.includes("x264") || videoCodec.includes("x265") || videoCodec.includes("av1")) {
           args.push("-crf", preset.crf.toString());
         }
         if (preset.bitrate && !options.videoBitrate) {
@@ -324,8 +360,14 @@ export class UniversalConverter {
     if (entry) {
       entry.job.cancel();
       entry.task.status = "cancelled";
+      const outputPath = entry.task.outputPath;
       this.tasks.delete(taskId);
-      this.notifyStatus(taskId, "cancelled");
+      this.notifyStatus(taskId, "cancelled", outputPath);
+      setTimeout(async () => {
+        try {
+          await fsp.unlink(outputPath).catch(() => {});
+        } catch {}
+      }, 500);
     }
   }
 
@@ -336,9 +378,16 @@ export class UniversalConverter {
     return this.tasks.get(taskId)?.task;
   }
 
-  private notifyProgress(taskId: string, percent: number): void {
+  private notifyProgress(taskId: string, percent: number, data?: ConvertProgressData): void {
     const win = this.getWindow();
     if (win) {
+      win.webContents.send("converter:progress", {
+        taskId,
+        percent,
+        speed: data?.speed,
+        timemark: data?.timemark,
+        fps: data?.fps,
+      });
       win.webContents.send("download:progress", {
         id: taskId,
         downloadedBytes: percent,
@@ -349,9 +398,15 @@ export class UniversalConverter {
     }
   }
 
-  private notifyStatus(taskId: string, status: "complete" | "failed" | "cancelled", errorMessage?: string): void {
+  private notifyStatus(taskId: string, status: "complete" | "failed" | "cancelled", outputPath?: string, errorMessage?: string): void {
     const win = this.getWindow();
     if (win) {
+      win.webContents.send("converter:status", {
+        taskId,
+        status,
+        outputPath,
+        errorMessage,
+      });
       win.webContents.send("download:status", {
         id: taskId,
         status,
@@ -467,6 +522,28 @@ export const CONVERSION_PRESETS = {
     audioCodec: "pcm_s16le",
   },
   
+  // Video Codec presets (H.264, H.265, AV1)
+  "video-to-hevc-high": {
+    outputFormat: "mp4",
+    videoCodec: "libx265",
+    audioCodec: "aac",
+    quality: "high" as const,
+    preset: "medium" as const,
+  },
+  "video-to-av1-high": {
+    outputFormat: "mp4",
+    videoCodec: "libsvtav1",
+    audioCodec: "aac",
+    quality: "high" as const,
+  },
+  "video-to-h264-universal": {
+    outputFormat: "mp4",
+    videoCodec: "libx264",
+    audioCodec: "aac",
+    quality: "high" as const,
+    preset: "medium" as const,
+  },
+
   // Image conversions
   "image-to-jpg-high": {
     outputFormat: "jpg",
@@ -483,29 +560,13 @@ export const CONVERSION_PRESETS = {
 
 /**
  * Detect available hardware-accelerated encoders by actually probing this
- * machine's ffmpeg build, instead of guessing.
- *
- * BUG FIX: this used to be a stub that always returned all-false ("This
- * would need to actually probe FFmpeg encoders. For now, return a
- * placeholder") — meaning the "auto" hardware-acceleration option never
- * did anything beyond adding a decode-side `-hwaccel auto` flag. The video
- * *encoder* (the far more expensive half of a conversion) always stayed on
- * CPU libx264/libx265 regardless of what GPU was in the machine or what the
- * "Use GPU acceleration" toggle in Settings claimed to do. `ffmpeg -encoders`
- * lists every encoder this specific ffmpeg build was compiled with — a
- * locally-built or minimal ffmpeg may lack nvenc/qsv/amf support even on
- * hardware that could otherwise support it, so probing beats assuming.
- *
- * Result is memoized per ffmpeg binary path: encoder support doesn't change
- * between conversions in the same app session, so there's no reason to
- * re-spawn ffmpeg -encoders (a real subprocess, non-trivial to parse) on
- * every single conversion.
+ * machine's ffmpeg build, including H.264, HEVC, and AV1.
  */
-const hwAccelCache = new Map<string, Promise<{ nvenc: boolean; qsv: boolean; amf: boolean }>>();
+const hwAccelCache = new Map<string, Promise<{ nvenc: boolean; qsv: boolean; amf: boolean; av1: boolean }>>();
 
 export async function detectHardwareAcceleration(
   ffmpegPath: string,
-): Promise<{ nvenc: boolean; qsv: boolean; amf: boolean }> {
+): Promise<{ nvenc: boolean; qsv: boolean; amf: boolean; av1: boolean }> {
   const cached = hwAccelCache.get(ffmpegPath);
   if (cached) return cached;
 
@@ -517,12 +578,10 @@ export async function detectHardwareAcceleration(
         nvenc: stdout.includes("h264_nvenc") || stdout.includes("hevc_nvenc"),
         qsv: stdout.includes("h264_qsv") || stdout.includes("hevc_qsv"),
         amf: stdout.includes("h264_amf") || stdout.includes("hevc_amf"),
+        av1: stdout.includes("av1_nvenc") || stdout.includes("av1_qsv") || stdout.includes("av1_amf"),
       };
     } catch {
-      // ffmpeg missing, unreadable, or -encoders unsupported by this build
-      // — fail closed to "no hardware encoders" rather than throwing, since
-      // this is a best-effort optimization, not a required capability.
-      return { nvenc: false, qsv: false, amf: false };
+      return { nvenc: false, qsv: false, amf: false, av1: false };
     }
   })();
 

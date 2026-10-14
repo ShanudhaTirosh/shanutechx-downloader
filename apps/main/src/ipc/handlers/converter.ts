@@ -27,4 +27,10 @@ export function registerConverterHandlers(converter: ConverterManager): void {
   registerHandler("converter:getPresets", () => ({
     presets: converter.getPresets(),
   }));
+
+  registerHandler("converter:probe", (p) => converter.probe(p.filePath));
+
+  registerHandler("converter:cancel", (p) => {
+    converter.cancel(p.taskId);
+  });
 }

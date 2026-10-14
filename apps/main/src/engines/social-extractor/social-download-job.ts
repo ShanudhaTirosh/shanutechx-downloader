@@ -3,16 +3,33 @@ import { runProcess } from "../../utils/spawn-process";
 import { reserveUniqueFilepath } from "../../utils/filename";
 
 export interface SocialDownloadEvents {
-  onProgress: (downloadedBytes: number, sizeBytes: number | null) => void;
+  onProgress: (downloadedBytes: number, sizeBytes: number | null, speedBps?: number, etaSec?: number | null) => void;
   onStatus: (status: "downloading" | "paused" | "complete" | "failed" | "cancelled", errorMessage?: string) => void;
   onFilename: (filename: string) => void;
 }
 
-const PROGRESS_RE = /\[download\]\s+(\d+(?:\.\d+)?)%\s+of\s+~?\s*([\d.]+)(K|M|G)iB/i;
+const PROGRESS_RE = /\[download\]\s+(\d+(?:\.\d+)?)%\s+of\s+~?\s*([\d.]+)\s*([KMGT]?i?B)(?:[^\n]*?at\s+([\d.]+)\s*([KMGT]?i?B)\/s)?(?:[^\n]*?ETA\s+([\d:]+))?/i;
 
 function unitToBytes(value: number, unit: string): number {
-  const mult = unit.toUpperCase() === "G" ? 1024 ** 3 : unit.toUpperCase() === "M" ? 1024 ** 2 : 1024;
-  return value * mult;
+  const u = unit.toUpperCase().replace("IB", "").replace("B", "");
+  if (u === "T") return value * (1024 ** 4);
+  if (u === "G") return value * (1024 ** 3);
+  if (u === "M") return value * (1024 ** 2);
+  if (u === "K") return value * 1024;
+  return value;
+}
+
+function parseEtaString(etaStr: string): number | null {
+  const parts = etaStr.split(":").map(Number);
+  if (parts.some(isNaN)) return null;
+  const p0 = parts[0];
+  const p1 = parts[1];
+  const p2 = parts[2];
+  if (parts.length === 2 && p0 !== undefined && p1 !== undefined) return p0 * 60 + p1;
+  if (parts.length === 3 && p0 !== undefined && p1 !== undefined && p2 !== undefined) {
+    return p0 * 3600 + p1 * 60 + p2;
+  }
+  return null;
 }
 
 /**
@@ -60,6 +77,9 @@ export class SocialDownloadJob {
   // yt-dlp process with the same event wiring.
   private events: SocialDownloadEvents | null = null;
 
+  private lastProgressSampleTime = 0;
+  private lastProgressSampleBytes = 0;
+
   constructor(
     private id: string,
     private url: string,
@@ -70,6 +90,10 @@ export class SocialDownloadJob {
     private subtitleLanguages: string,
     private autoEmbedThumbnail: boolean,
     private cookiesFromBrowser: string,
+    private isAudioExtract?: boolean,
+    private audioFormat?: string,
+    private audioQuality?: string,
+    private ffmpegPath?: string,
   ) {}
 
   cancel(): void {
@@ -114,11 +138,27 @@ export class SocialDownloadJob {
       "--newline",
       "--no-warnings",
       "--restrict-filenames", "--windows-filenames",
+      "--concurrent-fragments", "5",
       "-o", outputTemplate,
     ];
+
+    // Configure FFmpeg location for stream muxing and audio postprocessing
+    if (this.ffmpegPath) {
+      args.push("--ffmpeg-location", this.ffmpegPath);
+    }
+
+    // Audio extraction mode
+    if (this.isAudioExtract) {
+      args.push("-x");
+      if (this.audioFormat) {
+        args.push("--audio-format", this.audioFormat);
+      }
+      if (this.audioQuality) {
+        args.push("--audio-quality", this.audioQuality);
+      }
+    }
+
     // Use yt-dlp's built-in resume capability when restarting after a pause.
-    // This causes yt-dlp to check existing partial files and continue from the
-    // last downloaded byte rather than restarting from the beginning.
     if (isContinue) args.push("--continue");
     if (this.ignoreCertificateErrors) args.push("--no-check-certificate");
     if (this.autoEmbedThumbnail) args.push("--embed-thumbnail");
@@ -146,10 +186,36 @@ export class SocialDownloadJob {
           this.lastKnownDownloadedBytes = Math.round((percent / 100) * totalBytes);
           this.lastKnownSizeBytes = totalBytes;
 
+          let speedBps: number | undefined = undefined;
+          if (progressMatch[4] && progressMatch[5]) {
+            speedBps = Math.round(unitToBytes(Number(progressMatch[4]), progressMatch[5]));
+          }
+
+          let etaSec: number | null = null;
+          if (progressMatch[6]) {
+            etaSec = parseEtaString(progressMatch[6]);
+          }
+
           const now = Date.now();
+          if (speedBps === undefined && this.lastProgressSampleTime > 0) {
+            const elapsed = (now - this.lastProgressSampleTime) / 1000;
+            if (elapsed > 0.1) {
+              const deltaBytes = this.lastKnownDownloadedBytes - this.lastProgressSampleBytes;
+              if (deltaBytes > 0) {
+                speedBps = Math.round(deltaBytes / elapsed);
+              }
+            }
+          }
+          if (speedBps && speedBps > 0 && etaSec === null && totalBytes > this.lastKnownDownloadedBytes) {
+            etaSec = Math.round((totalBytes - this.lastKnownDownloadedBytes) / speedBps);
+          }
+
           if (now - this.lastProgressEmitAt < SocialDownloadJob.PROGRESS_EMIT_INTERVAL_MS) return;
           this.lastProgressEmitAt = now;
-          events.onProgress(this.lastKnownDownloadedBytes, totalBytes);
+          this.lastProgressSampleTime = now;
+          this.lastProgressSampleBytes = this.lastKnownDownloadedBytes;
+
+          events.onProgress(this.lastKnownDownloadedBytes, totalBytes, speedBps, etaSec);
         }
       },
     });
@@ -158,14 +224,9 @@ export class SocialDownloadJob {
     try {
       await promise;
       if (this.isPaused) {
-        // Process was killed cleanly by pause() — not a failure.
         events.onStatus("paused");
         return;
       }
-      // Guaranteed final flush, same as the HTTP and converter engines —
-      // if the last progress line landed inside the throttle window, the
-      // UI shouldn't sit on a stale under-100% number once yt-dlp has
-      // actually finished.
       if (this.lastKnownSizeBytes !== null) events.onProgress(this.lastKnownSizeBytes, this.lastKnownSizeBytes);
       events.onStatus("complete");
     } catch (err) {

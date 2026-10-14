@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCircle2, XCircle, XSquare, Trash2, History, Trash, FolderOpen } from "lucide-react";
+import { CheckCircle2, XCircle, XSquare, Trash2, History, Trash, FolderOpen, HardDrive } from "lucide-react";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { useToast } from "../../components/ui/Toast";
@@ -13,15 +13,25 @@ type Filter = "all" | "complete" | "failed" | "cancelled";
 
 export function HistoryPage() {
   const [items, setItems] = useState<DownloadRecord[]>([]);
+  const [stats, setStats] = useState<{ totalCompleted: number; totalFailed: number; totalBytesDownloaded: number } | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [loading, setLoading] = useState(true);
   const { showToast } = useToast();
 
   async function load() {
     setLoading(true);
-    const list = await ipc.invoke("history:list", undefined);
-    setItems(list);
-    setLoading(false);
+    try {
+      const [list, s] = await Promise.all([
+        ipc.invoke("history:list", undefined),
+        ipc.invoke("history:stats", undefined),
+      ]);
+      setItems(list);
+      setStats(s);
+    } catch {
+      // fallback
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { void load(); }, []);
@@ -29,6 +39,7 @@ export function HistoryPage() {
   async function handleRemove(id: string) {
     await ipc.invoke("history:remove", { id });
     setItems((prev) => prev.filter((i) => i.id !== id));
+    void ipc.invoke("history:stats", undefined).then(setStats);
   }
 
   async function handleClearAll(status?: "complete" | "failed" | "cancelled") {
@@ -48,6 +59,7 @@ export function HistoryPage() {
     }
     
     setItems((prev) => prev.filter((i) => !toRemove.includes(i)));
+    void ipc.invoke("history:stats", undefined).then(setStats);
     showToast(`Cleared ${toRemove.length} items from history`, "success");
   }
 
@@ -55,7 +67,7 @@ export function HistoryPage() {
 
   return (
     <div className="max-w-4xl">
-      <div className="flex items-end justify-between mb-6">
+      <div className="flex items-end justify-between mb-4">
         <div>
           <motion.h1
             initial={{ opacity: 0, y: -6 }}
@@ -67,23 +79,107 @@ export function HistoryPage() {
           </motion.h1>
           <p className="text-sm text-zinc-500">Completed, failed, and cancelled transfers.</p>
         </div>
-        {items.length > 0 && (
-          <div className="flex gap-2">
-            {filter !== "all" && (
-              <Button 
-                size="sm" 
-                variant="secondary" 
-                onClick={() => handleClearAll(filter as "complete" | "failed" | "cancelled")}
-              >
-                <Trash size={14} /> Clear {filter}
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={async () => {
+              try {
+                const res = await ipc.invoke("history:export", undefined);
+                const blob = new Blob([res.json], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `shanutechx-history-${new Date().toISOString().slice(0, 10)}.json`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+                showToast(`Exported ${res.count} history records to JSON`, "success");
+              } catch {
+                showToast("Failed to export history", "error");
+              }
+            }}
+          >
+            Export JSON
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={async () => {
+              const input = document.createElement("input");
+              input.type = "file";
+              input.accept = ".json";
+              input.onchange = async () => {
+                const file = input.files?.[0];
+                if (!file) return;
+                try {
+                  const text = await file.text();
+                  const res = await ipc.invoke("history:import", { json: text });
+                  if (res.success) {
+                    showToast(`Imported ${res.imported} history records`, "success");
+                    await load();
+                  } else {
+                    showToast("Invalid history file format", "error");
+                  }
+                } catch {
+                  showToast("Failed to import history", "error");
+                }
+              };
+              input.click();
+            }}
+          >
+            Import JSON
+          </Button>
+          {items.length > 0 && (
+            <>
+              {filter !== "all" && (
+                <Button 
+                  size="sm" 
+                  variant="secondary" 
+                  onClick={() => handleClearAll(filter as "complete" | "failed" | "cancelled")}
+                >
+                  <Trash size={14} /> Clear {filter}
+                </Button>
+              )}
+              <Button size="sm" variant="secondary" onClick={() => handleClearAll()}>
+                <Trash size={14} /> Clear all
               </Button>
-            )}
-            <Button size="sm" variant="secondary" onClick={() => handleClearAll()}>
-              <Trash size={14} /> Clear all
-            </Button>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
+
+      {/* History Metrics & Statistics */}
+      {stats && (
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className="glass-panel p-3.5 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-status-success/10 flex items-center justify-center text-status-success shrink-0">
+              <CheckCircle2 size={18} />
+            </div>
+            <div>
+              <p className="text-xs text-zinc-500">Completed</p>
+              <p className="text-base font-semibold text-zinc-100">{stats.totalCompleted}</p>
+            </div>
+          </div>
+          <div className="glass-panel p-3.5 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-status-danger/10 flex items-center justify-center text-status-danger shrink-0">
+              <XCircle size={18} />
+            </div>
+            <div>
+              <p className="text-xs text-zinc-500">Failed</p>
+              <p className="text-base font-semibold text-zinc-100">{stats.totalFailed}</p>
+            </div>
+          </div>
+          <div className="glass-panel p-3.5 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-brand-secondary/10 flex items-center justify-center text-brand-secondary shrink-0">
+              <HardDrive size={18} />
+            </div>
+            <div>
+              <p className="text-xs text-zinc-500">Total Downloaded</p>
+              <p className="text-base font-semibold text-zinc-100">{formatBytes(stats.totalBytesDownloaded)}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-2 mb-4 relative">
         {(["all", "complete", "failed", "cancelled"] as Filter[]).map((f) => (

@@ -4,7 +4,7 @@ import { ipc } from "../lib/ipc-client";
 
 interface DownloadsState {
   items: Record<string, DownloadRecord>;
-  addUrl: (url: string, allowDuplicate?: boolean) => Promise<void>;
+  addUrl: (url: string, allowDuplicate?: boolean, saveDir?: string) => Promise<void>;
   pause: (id: string) => Promise<void>;
   resume: (id: string) => Promise<void>;
   cancel: (id: string) => Promise<void>;
@@ -21,13 +21,13 @@ interface DownloadsState {
 export const useDownloadsStore = create<DownloadsState>((set, get) => ({
   items: {},
 
-  addUrl: async (url, allowDuplicate) => {
+  addUrl: async (url, allowDuplicate, saveDir) => {
     // Lets a DUPLICATE_URL rejection from the main process (see
     // QueueManager.start / shared-types) propagate up uncaught — callers
     // (AddUrlBar) pattern-match that prefix to offer "add anyway?" and
     // retry with allowDuplicate: true, rather than this store papering
     // over it as a silent success or a generic failure.
-    const { id } = await ipc.invoke("downloads:start", { url, allowDuplicate });
+    const { id } = await ipc.invoke("downloads:start", { url, allowDuplicate, saveDir });
     await get().refresh(); // pick up the "queued" row immediately, before the first progress event
     void id;
   },
@@ -49,7 +49,13 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
         return {
           items: {
             ...s.items,
-            [p.id]: { ...existing, downloadedBytes: p.downloadedBytes, sizeBytes: p.totalBytes, speedBps: p.speedBps },
+            [p.id]: {
+              ...existing,
+              downloadedBytes: p.downloadedBytes,
+              sizeBytes: p.totalBytes,
+              speedBps: p.speedBps,
+              etaSec: p.etaSec ?? existing.etaSec,
+            },
           },
         };
       });

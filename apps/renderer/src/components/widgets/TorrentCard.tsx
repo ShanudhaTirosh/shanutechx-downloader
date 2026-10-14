@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Pause, Play, Trash2 } from "lucide-react";
+import { Pause, Play, Trash2, ArrowDown } from "lucide-react";
 import type { TorrentStatus } from "@shanutechx/shared-types";
 import { Button } from "../ui/Button";
 import { ProgressRing } from "../ui/ProgressRing";
@@ -37,9 +37,17 @@ export function TorrentCard({ torrent: t, onPause, onResume, onRemove }: Torrent
       </motion.div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-zinc-100 truncate">{t.name}</p>
-        <p className="text-xs text-zinc-500 mt-1">
-          {formatBytes(t.totalDownloaded)} / {formatBytes(t.totalSize)} · {formatSpeed(t.downloadRateBps)} ↓ · {t.numPeers} peers · {t.state}
-        </p>
+        <div className="flex items-center gap-1.5 text-xs text-zinc-500 mt-1 flex-wrap">
+          <span>{formatBytes(t.totalDownloaded)} / {formatBytes(t.totalSize)}</span>
+          <span>·</span>
+          <span className="inline-flex items-center text-zinc-400">
+            {formatSpeed(t.downloadRateBps)} <ArrowDown size={11} className="ml-0.5" />
+          </span>
+          <span>·</span>
+          <span>{t.numPeers} peers</span>
+          <span>·</span>
+          <span className="capitalize">{t.state}</span>
+        </div>
       </div>
       <div className="flex items-center gap-2">
         {t.state === "paused" ? (

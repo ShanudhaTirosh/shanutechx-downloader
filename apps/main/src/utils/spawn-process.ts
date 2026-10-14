@@ -22,7 +22,8 @@ export function runProcess(
   let stderrRemainder = "";
 
   const promise = new Promise<RunResult>((resolve, reject) => {
-    child = spawn(command, args, { windowsHide: true });
+    const isCmd = process.platform === "win32" && /\.(cmd|bat)$/i.test(command);
+    child = spawn(command, args, { windowsHide: true, shell: isCmd });
 
     const timeout = opts.timeoutMs
       ? setTimeout(() => { child.kill("SIGTERM"); reject(new Error(`Process timed out after ${opts.timeoutMs}ms`)); }, opts.timeoutMs)

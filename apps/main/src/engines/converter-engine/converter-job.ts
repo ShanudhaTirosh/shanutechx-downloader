@@ -11,8 +11,14 @@ export interface ConvertOptions {
   stallTimeoutMs?: number;
 }
 
+export interface ConvertProgressData {
+  speed?: string;
+  timemark?: string;
+  fps?: number;
+}
+
 export interface ConvertEvents {
-  onProgress: (percent: number) => void;
+  onProgress: (percent: number, data?: ConvertProgressData) => void;
   onDone: (outputPath: string) => void;
   onError: (message: string) => void;
 }
@@ -23,7 +29,10 @@ export interface ConvertEvents {
 // that's consistently microseconds, so we key off that one — verified
 // against a real local ffmpeg build's `-progress pipe:1` output, not assumed.
 const TIME_US_RE = /out_time_us=(\d+)/;
-const DURATION_RE = /Duration:\s*(\d+):(\d+):(\d+\.\d+)/;
+const DURATION_RE = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/;
+const SPEED_RE = /speed=\s*([\d.]+x)/;
+const FPS_RE = /fps=\s*([\d.]+)/;
+const OUT_TIME_RE = /out_time=\s*([\d:.]+)/;
 
 /**
  * Wraps a single ffmpeg invocation via the native spawn wrapper (argv array,
@@ -47,6 +56,9 @@ export class ConverterJob {
   async run(opts: ConvertOptions, events: ConvertEvents): Promise<void> {
     const args = ["-i", opts.inputPath, ...opts.ffmpegArgs, "-progress", "pipe:1", "-y", opts.outputPath];
     let totalDurationMs: number | null = null;
+    let currentSpeed: string | undefined;
+    let currentTimemark: string | undefined;
+    let currentFps: number | undefined;
     const stallTimeoutMs = opts.stallTimeoutMs ?? 60_000;
 
     const resetStallTimer = () => {
@@ -69,13 +81,24 @@ export class ConverterJob {
       },
       onStdoutLine: (line) => {
         resetStallTimer();
+        const spMatch = SPEED_RE.exec(line);
+        if (spMatch?.[1]) currentSpeed = spMatch[1];
+        const fpsMatch = FPS_RE.exec(line);
+        if (fpsMatch?.[1]) currentFps = parseFloat(fpsMatch[1]);
+        const otMatch = OUT_TIME_RE.exec(line);
+        if (otMatch?.[1]) currentTimemark = otMatch[1].split(".")[0];
+
         const timeMatch = TIME_US_RE.exec(line); // "N/A" lines simply won't match — no NaN risk
         if (timeMatch?.[1] && totalDurationMs) {
           const currentMs = Number(timeMatch[1]) / 1000; // microseconds -> ms
           const now = Date.now();
           if (now - this.lastProgressEmitAt < ConverterJob.PROGRESS_EMIT_INTERVAL_MS) return;
           this.lastProgressEmitAt = now;
-          events.onProgress(Math.min(99, (currentMs / totalDurationMs) * 100));
+          events.onProgress(Math.min(99, (currentMs / totalDurationMs) * 100), {
+            speed: currentSpeed,
+            timemark: currentTimemark,
+            fps: currentFps,
+          });
         }
       },
     });
@@ -83,7 +106,11 @@ export class ConverterJob {
 
     try {
       await promise;
-      events.onProgress(100);
+      events.onProgress(100, {
+        speed: currentSpeed,
+        timemark: currentTimemark,
+        fps: currentFps,
+      });
       events.onDone(opts.outputPath);
     } catch (err) {
       events.onError(err instanceof Error ? err.message : String(err));

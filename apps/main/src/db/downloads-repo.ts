@@ -134,6 +134,46 @@ export const downloadsRepo = {
     getDb().delete(downloads).where(eq(downloads.id, id)).run();
   },
 
+  clearAll(): void {
+    downloadsRepo._lastProgressWriteAt.clear();
+    getDb().delete(downloads).run();
+  },
+
+  importRecords(records: Partial<DownloadRecord>[]): number {
+    let imported = 0;
+    const db = getDb();
+    for (const r of records) {
+      if (!r.url || !r.id) continue;
+      try {
+        const existing = db.select().from(downloads).where(eq(downloads.id, r.id)).get();
+        if (!existing) {
+          db.insert(downloads).values({
+            id: r.id,
+            url: r.url,
+            filename: r.filename || "download",
+            filepath: r.filepath ?? null,
+            sizeBytes: r.sizeBytes ?? null,
+            downloadedBytes: r.downloadedBytes ?? 0,
+            status: (r.status as any) || "complete",
+            sourceType: r.sourceType || "http",
+            platform: r.platform ?? null,
+            format: r.format ?? null,
+            quality: r.quality ?? null,
+            segments: r.segments ?? 1,
+            createdAt: r.createdAt || new Date().toISOString(),
+            completedAt: r.completedAt ?? null,
+            scheduledFor: r.scheduledFor ?? null,
+            avgSpeedBps: r.avgSpeedBps ?? null,
+          }).run();
+          imported++;
+        }
+      } catch (err) {
+        console.warn("Failed to import record:", err);
+      }
+    }
+    return imported;
+  },
+
   stats(): { totalCompleted: number; totalFailed: number; totalBytesDownloaded: number } {
     const rows = getDb().select().from(downloads).all();
     return {

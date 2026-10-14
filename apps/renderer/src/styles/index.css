@@ -59,3 +59,50 @@
     @apply outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base;
   }
 }
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite ease-in-out;
+}
+
+/* Light mode overrides */
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+[data-theme="light"] body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .glass-panel {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="light"] .glass-panel-hover:hover {
+  background-color: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.16) !important;
+}
+
+[data-theme="light"] select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+[data-theme="light"] select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] select option:checked,
+[data-theme="light"] select option:hover {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}

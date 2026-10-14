@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { AlertCircle, ArrowRight } from "lucide-react";
 import { AddUrlBar } from "../../components/widgets/AddUrlBar";
 import { DownloadCard } from "../../components/widgets/DownloadCard";
 import { useDownloadsStore } from "../../stores/downloadsStore";
@@ -25,11 +26,14 @@ export function DownloadsPage() {
         Direct Downloads
       </motion.h1>
       <p className="text-sm text-zinc-500 mb-2">
-        Download files directly from HTTP/HTTPS URLs - perfect for direct file links.
+        Download files directly from HTTP/HTTPS URLs with accelerated multi-segment streaming.
       </p>
-      <p className="text-xs text-zinc-600 mb-6">
-        ⚠️ For YouTube, TikTok, Instagram, Pornhub, or other video platforms → Use <strong className="text-brand-secondary">Social Grab</strong> tab instead
-      </p>
+      <div className="flex items-center gap-1.5 text-xs text-zinc-400 bg-surface-raised/40 px-3 py-2 rounded-lg border border-white/5 mb-6">
+        <AlertCircle size={14} className="text-amber-400 shrink-0" />
+        <span>For YouTube, TikTok, Instagram, Twitter, or video sites</span>
+        <ArrowRight size={12} className="text-zinc-500" />
+        <span>Use the <strong className="text-brand-secondary font-medium">Social Grab</strong> tab</span>
+      </div>
       <AddUrlBar />
       <AnimatePresence mode="wait">
         {list.length === 0 ? (

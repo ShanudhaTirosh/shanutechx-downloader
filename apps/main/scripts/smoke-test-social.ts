@@ -31,9 +31,17 @@ const FAKE_INFO = {
 
 async function main() {
   const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "shanutechx-fakeytdlp-"));
-  const fakeYtDlpPath = path.join(tmpDir, "yt-dlp");
-  await fsp.writeFile(fakeYtDlpPath, `#!/bin/sh\ncat << 'JSON'\n${JSON.stringify(FAKE_INFO)}\nJSON\n`);
-  await fsp.chmod(fakeYtDlpPath, 0o755);
+  const isWin = process.platform === "win32";
+  const fakeYtDlpPath = path.join(tmpDir, isWin ? "yt-dlp.cmd" : "yt-dlp");
+  const nodeScript = path.join(tmpDir, "script.js");
+  await fsp.writeFile(nodeScript, `console.log(JSON.stringify(${JSON.stringify(FAKE_INFO)}));\n`);
+
+  if (isWin) {
+    await fsp.writeFile(fakeYtDlpPath, `@echo off\r\nnode "${nodeScript}"\r\n`);
+  } else {
+    await fsp.writeFile(fakeYtDlpPath, `#!/bin/sh\nnode "${nodeScript}"\n`);
+    await fsp.chmod(fakeYtDlpPath, 0o755);
+  }
 
   console.log("[test] extractMediaInfo() parses yt-dlp --dump-json output correctly...");
   const info = await extractMediaInfo("https://example.com/watch?v=abc123", fakeYtDlpPath, false);

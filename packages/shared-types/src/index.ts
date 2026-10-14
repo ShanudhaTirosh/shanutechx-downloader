@@ -46,6 +46,8 @@ export interface DownloadRecord {
   completedAt: string | null;
   /** ISO datetime string — null means "start immediately". When set, the download stays queued until this time. */
   scheduledFor: string | null;
+  /** Estimated seconds remaining, computed in real-time or null when unknown */
+  etaSec?: number | null;
 }
 
 export interface MediaFormatOption {
@@ -54,6 +56,21 @@ export interface MediaFormatOption {
   ytdlpFormat: string;
   postprocessor?: string;
   quality?: string;
+}
+
+export interface MediaAudioQuality {
+  formatId: string;
+  ext: string;
+  abr?: number; // e.g. 320, 256, 192, 128
+  acodec?: string;
+  filesizeBytes?: number | null;
+}
+
+export interface MediaPhoto {
+  id: string;
+  url: string;
+  thumbnail?: string;
+  title?: string;
 }
 
 export interface MediaInfo {
@@ -67,6 +84,9 @@ export interface MediaInfo {
   filesizeBytes: number | null;
   isPlaylist: boolean;
   availableQualities: { height: number; formatId: string; ext: string; filesizeBytes: number | null }[];
+  availableAudioQualities?: MediaAudioQuality[];
+  photos?: MediaPhoto[];
+  isPhotoPost?: boolean;
 }
 
 export interface TorrentStatus {
@@ -151,7 +171,7 @@ export interface AppSettings {
   torrentDhtEnabled: boolean;
 
   minimizeToTray: boolean;
-  theme: "dark"; // light mode reserved for a future release
+  theme: "dark" | "light";
 
   /** Read by download-complete-actions.ts, called from both queue-manager.ts (HTTP) and social-manager.ts (yt-dlp) on a "complete" status. */
   autoOpenFolderOnComplete: boolean;
@@ -185,7 +205,7 @@ export interface IpcInvokeMap {
   /** Add a new download that is pre-scheduled. Returns the download id. */
   "downloads:scheduleNew": { req: { url: string; scheduledFor: string; allowDuplicate?: boolean }; res: { id: string } };
   /** Add a new social download that is pre-scheduled. */
-  "social:scheduleNew": { req: { url: string; format: import("./index").MediaFormatOption; scheduledFor: string }; res: { id: string } };
+  "social:scheduleNew": { req: { url: string; format: import("./index").MediaFormatOption; scheduledFor: string; saveDir?: string }; res: { id: string } };
 
   "settings:get": { req: void; res: AppSettings };
   /** Returns the settings as ACTUALLY applied — never a blind echo of the request */
@@ -196,7 +216,7 @@ export interface IpcInvokeMap {
   "settings:clearProxyCredentials": { req: void; res: void };
 
   "social:extract": { req: { url: string }; res: MediaInfo };
-  "social:download": { req: { url: string; format: MediaFormatOption }; res: { id: string } };
+  "social:download": { req: { url: string; format: MediaFormatOption; saveDir?: string }; res: { id: string } };
   "social:pause": { req: { id: string }; res: void };
   "social:resume": { req: { id: string }; res: void };
   "social:cancel": { req: { id: string }; res: void };
@@ -230,12 +250,22 @@ export interface IpcInvokeMap {
   };
   "converter:getSupportedFormats": { req: void; res: { video: string[]; audio: string[]; image: string[]; all: string[] } };
   "converter:getPresets": { req: void; res: { presets: Record<string, unknown> } };
+  "converter:probe": { req: { filePath: string }; res: MediaFileInfo };
+  "converter:cancel": { req: { taskId: string }; res: void };
 
   "history:list": { req: void; res: DownloadRecord[] };
   "history:stats": { req: void; res: { totalCompleted: number; totalFailed: number; totalBytesDownloaded: number } };
   "history:remove": { req: { id: string }; res: void };
+  "history:clear": { req: void; res: void };
+  "history:export": { req: void; res: { json: string; count: number } };
+  "history:import": { req: { json: string }; res: { imported: number; success: boolean } };
+
+  "social:downloadPhotos": { req: { photos: { id: string; url: string; title?: string }[]; saveDir?: string }; res: { success: boolean; savedPaths: string[] } };
+  "social:renderPhotosToVideo": { req: { photos: { id: string; url: string }[]; audioUrl?: string; durationPerPhotoSec?: number; saveDir?: string; title?: string }; res: { taskId: string } };
+  "social:batchExtract": { req: { urls: string[] }; res: { results: { url: string; info?: MediaInfo; error?: string }[] } };
 
   "app:getVersion": { req: void; res: { version: string } };
+  "app:getPlatform": { req: void; res: { platform: string } };
   "app:minimize": { req: void; res: void };
   "app:maximize": { req: void; res: void };
   "app:unmaximize": { req: void; res: void };
@@ -244,11 +274,31 @@ export interface IpcInvokeMap {
   "app:selectFile": { req: { title?: string; filters?: { name: string; extensions: string[] }[] }; res: { filePath: string | null } };
   "app:checkBinaries": { req: void; res: { ytdlp: boolean; ffmpeg: boolean; ffprobe: boolean } };
   "app:downloadBinaries": { req: void; res: { success: boolean } };
-  "app:checkForUpdates": { req: void; res: { updateAvailable: boolean; version?: string; releaseNotes?: string } };
-  "app:downloadUpdate": { req: void; res: void };
+  "app:checkForUpdates": { req: void; res: { updateAvailable: boolean; version?: string; releaseNotes?: string; downloadUrl?: string; publishedAt?: string } };
+  "app:downloadUpdate": { req: void; res: { success: boolean; message?: string } };
   /** Reveals the file in the OS file manager (Explorer/Finder/etc), selected. Silently no-ops if the path no longer exists. */
   "app:showInFolder": { req: { filepath: string }; res: { success: boolean } };
   "app:selectDirectory": { req: { title?: string; defaultPath?: string }; res: { dirPath: string | null } };
+}
+
+export interface MediaFileInfo {
+  path: string;
+  filename: string;
+  extension: string;
+  sizeBytes: number;
+  formattedSize: string;
+  category: "video" | "audio" | "image" | "unknown";
+  format?: string;
+  durationSec?: number;
+  formattedDuration?: string;
+  width?: number;
+  height?: number;
+  resolution?: string;
+  videoCodec?: string;
+  audioCodec?: string;
+  audioBitrate?: string;
+  videoBitrate?: string;
+  fps?: number;
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeMap;
@@ -262,11 +312,24 @@ export interface IpcEventMap {
     etaSec: number | null;
   };
   "download:status": { id: string; status: DownloadStatus; errorMessage?: string };
+  "converter:progress": {
+    taskId: string;
+    percent: number;
+    speed?: string;
+    timemark?: string;
+    fps?: number;
+  };
+  "converter:status": {
+    taskId: string;
+    status: "converting" | "complete" | "failed" | "cancelled";
+    outputPath?: string;
+    errorMessage?: string;
+  };
   "queue:global-speed": { downBps: number; upBps: number; activeCount: number };
   "torrent:status": TorrentStatus;
   "window:maximized-change": { maximized: boolean };
   "binary:download-progress": { binary: string; percent: number; downloadedBytes: number; totalBytes: number | null };
-  "update:available": { version: string; releaseNotes: string };
+  "update:available": { version: string; releaseNotes: string; downloadUrl?: string; publishedAt?: string };
   "update:download-progress": { percent: number };
   "update:downloaded": void;
 }

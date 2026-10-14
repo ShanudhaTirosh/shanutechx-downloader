@@ -1,5 +1,6 @@
 import type { BrowserWindow } from "electron";
 import { UniversalConverter, getSupportedFormats, CONVERSION_PRESETS, type ConversionOptions } from "./universal-converter";
+import { probeMediaFile } from "./media-probe";
 
 /**
  * ConverterManager - 100% offline FFmpeg-based converter
@@ -75,5 +76,12 @@ export class ConverterManager {
    */
   cancel(taskId: string): void {
     this.converter.cancel(taskId);
+  }
+
+  /**
+   * Probe media file details (codecs, duration, resolution, size)
+   */
+  async probe(filePath: string) {
+    return probeMediaFile(filePath);
   }
 }

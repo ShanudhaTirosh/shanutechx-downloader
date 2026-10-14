@@ -62,15 +62,27 @@ export class TorrentEngine {
 
   async add(magnetOrPath: string, saveDir: string): Promise<{ infoHash: string }> {
     const client = await this.getClient();
-    return new Promise((resolve) => {
-      const torrent = client.add(magnetOrPath, { path: saveDir }, (t) => {
-        this.torrents.set(t.infoHash, t);
-        resolve({ infoHash: t.infoHash });
-      });
-      // Some WebTorrent versions resolve infoHash synchronously before the
-      // metadata callback fires (magnet links need DHT lookup first) — track
-      // it either way so pause/resume/remove work immediately.
-      if (torrent.infoHash) this.torrents.set(torrent.infoHash, torrent);
+    return new Promise((resolve, reject) => {
+      try {
+        const torrent = client.add(magnetOrPath, { path: saveDir }, (t) => {
+          this.torrents.set(t.infoHash, t);
+          resolve({ infoHash: t.infoHash });
+        });
+        
+        torrent.on("error", (err: unknown) => {
+          reject(err instanceof Error ? err : new Error(String(err)));
+        });
+
+        // Some WebTorrent versions resolve infoHash synchronously before the
+        // metadata callback fires (magnet links need DHT lookup first) — track
+        // it either way so pause/resume/remove work immediately.
+        if (torrent.infoHash) {
+          this.torrents.set(torrent.infoHash, torrent);
+          resolve({ infoHash: torrent.infoHash });
+        }
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
     });
   }
 

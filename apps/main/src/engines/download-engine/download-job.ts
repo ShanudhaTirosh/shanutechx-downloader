@@ -84,15 +84,10 @@ export class DownloadJob {
       // Use actualUrl if provided (for redirected URLs like Google Drive)
       const downloadUrl = meta.actualUrl || this.url;
 
-      const canSegment = meta.acceptsRanges && meta.sizeBytes !== null && meta.sizeBytes > 2 * 1024 * 1024;
-      // Adaptive cap: the user's requested segment count (up to 32) used to
-      // apply unconditionally, so e.g. a 3MB file at the default setting
-      // would still open dozens of tiny per-segment connections — each with
-      // its own TLS handshake and request overhead — for a file that can't
-      // meaningfully benefit from that much parallelism. Cap segments so
-      // each one is at least MIN_BYTES_PER_SEGMENT, so segment count scales
-      // with the file instead of always maxing out the user's setting.
-      const MIN_BYTES_PER_SEGMENT = 4 * 1024 * 1024; // 4MB
+      const canSegment = meta.acceptsRanges && meta.sizeBytes !== null && meta.sizeBytes > 512 * 1024;
+      // Adaptive cap: allows multi-segment downloading down to 512KB segments
+      // so even smaller files benefit from concurrency without excessive connection overhead.
+      const MIN_BYTES_PER_SEGMENT = 512 * 1024; // 512KB
       const maxUsefulSegments = meta.sizeBytes !== null
         ? Math.max(1, Math.floor(meta.sizeBytes / MIN_BYTES_PER_SEGMENT))
         : this.requestedSegmentCount;
@@ -131,8 +126,6 @@ export class DownloadJob {
 
   get result() {
     const elapsedSec = Math.max((Date.now() - this.startedAt) / 1000, 0.001);
-    // Real elapsed-time-based average — the direct fix for the old app's
-    // `elapsed = 0` bug that made every stored avg_speed equal to the file size.
     const avgSpeedBps = this.downloadedBytes / elapsedSec;
     return { filepath: this.finalFilepath, sizeBytes: this.downloadedBytes, avgSpeedBps };
   }
@@ -161,28 +154,23 @@ export class DownloadJob {
         await this.attemptSegmentDownload(seg, events, globalBucket, perFileBucket, attempt > 0, downloadUrl);
         return;
       } catch (err) {
-        if (this.abortController.signal.aborted) throw err; // never retry a genuine user cancel
+        if (this.abortController.signal.aborted) throw err;
         
-        // Check if error is a permanent failure (don't retry)
         const errorMsg = err instanceof Error ? err.message : String(err);
         const isPermanentFailure = 
           errorMsg.includes("404") || 
           errorMsg.includes("403") || 
           errorMsg.includes("401") ||
-          errorMsg.includes("410") || // Gone
+          errorMsg.includes("410") ||
           errorMsg.includes("Not Found") ||
           errorMsg.includes("Forbidden");
         
         if (isPermanentFailure) {
-          throw err; // Don't retry permanent failures
+          throw err;
         }
         
         attempt++;
         if (attempt > this.retryAttempts) throw err;
-        // Exponential-ish backoff, capped — and RESUME from the bytes this
-        // segment already has on disk (via the Range header's start offset),
-        // rather than discarding partial progress and starting the segment
-        // over on every transient network blip.
         await new Promise((r) => setTimeout(r, Math.min(5000, 500 * attempt)));
       }
     }
@@ -191,17 +179,23 @@ export class DownloadJob {
   private async attemptSegmentDownload(
     seg: SegmentPlan, events: DownloadJobEvents, globalBucket: TokenBucket, perFileBucket: TokenBucket, isRetry: boolean, downloadUrl: string,
   ): Promise<void> {
-    const canResumeViaRange = this.segments.length > 1; // only true multi-segment requests carry a Range header at all
+    const canResumeViaRange = this.segments.length > 1 || (seg.end > seg.start);
     const alreadyOnDisk = canResumeViaRange ? (this.segmentBytesDone[seg.index] ?? 0) : 0;
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "Accept": "*/*",
+    };
     if (canResumeViaRange) headers.range = `bytes=${seg.start + alreadyOnDisk}-${seg.end}`;
 
-    const res = await request(downloadUrl, { method: "GET", headers, signal: this.abortController.signal, dispatcher: this.dispatcher });
-    // Only append when we actually asked the server to resume from a byte
-    // offset — a plain whole-file GET retry must truncate and restart
-    // cleanly, or it would double-write and corrupt the segment's temp file.
+    const res = await request(downloadUrl, {
+      method: "GET",
+      headers,
+      signal: this.abortController.signal,
+      dispatcher: this.dispatcher,
+      maxRedirections: 5,
+    });
     const shouldAppend = isRetry && canResumeViaRange;
-    if (isRetry && !canResumeViaRange) this.segmentBytesDone[seg.index] = 0; // restarting from zero — reset the counter to match
+    if (isRetry && !canResumeViaRange) this.segmentBytesDone[seg.index] = 0;
     const fileStream = fs.createWriteStream(seg.tempPath, { flags: shouldAppend ? "a" : "w" });
 
     for await (const chunk of res.body) {
@@ -211,9 +205,9 @@ export class DownloadJob {
       await perFileBucket.consume(chunk.length);
       await globalBucket.consume(chunk.length);
 
-      await new Promise<void>((resolve, reject) => {
-        fileStream.write(chunk, (err) => (err ? reject(err) : resolve()));
-      });
+      if (!fileStream.write(chunk)) {
+        await new Promise<void>((resolve) => fileStream.once("drain", resolve));
+      }
 
       this.segmentBytesDone[seg.index] = (this.segmentBytesDone[seg.index] ?? 0) + chunk.length;
       this.emitProgressThrottled(events);

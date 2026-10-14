@@ -3,10 +3,15 @@ import type { SocialManager } from "../../engines/social-extractor/social-manage
 
 export function registerSocialHandlers(social: SocialManager): void {
   registerHandler("social:extract", (p) => social.extract(p.url));
-  registerHandler("social:download", (p) => social.start(p.url, p.format));
+  registerHandler("social:download", (p) => social.start(p.url, p.format, p.saveDir));
   registerHandler("social:pause", (p) => { social.pause(p.id); });
   registerHandler("social:resume", (p) => { social.resume(p.id); });
   registerHandler("social:cancel", (p) => { social.cancel(p.id); });
   // Scheduler: add a social download that starts at a specific time
-  registerHandler("social:scheduleNew", (p) => social.scheduleNew(p.url, p.format, p.scheduledFor));
+  registerHandler("social:scheduleNew", (p) => social.scheduleNew(p.url, p.format, p.scheduledFor, p.saveDir));
+  
+  // Photos and batch handlers
+  registerHandler("social:downloadPhotos", (p) => social.downloadPhotos(p.photos, p.saveDir));
+  registerHandler("social:renderPhotosToVideo", (p) => social.renderPhotosToVideo(p.photos, p.audioUrl, p.durationPerPhotoSec, p.saveDir, p.title));
+  registerHandler("social:batchExtract", (p) => social.batchExtract(p.urls));
 }

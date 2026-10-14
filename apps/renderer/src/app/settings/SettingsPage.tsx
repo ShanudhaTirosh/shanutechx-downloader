@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Download, RefreshCw, CheckCircle2, AlertCircle, FolderOpen } from "lucide-react";
+import { Download, RefreshCw, CheckCircle2, AlertCircle, FolderOpen, Moon, Sun } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "../../components/ui/Card";
 import { Toggle } from "../../components/ui/Toggle";
 import { Button } from "../../components/ui/Button";
@@ -286,6 +286,54 @@ export function SettingsPage() {
 
       <motion.div variants={listItem}>
       <Card>
+        <CardHeader><CardTitle>Appearance</CardTitle></CardHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <span className="text-sm text-zinc-300">Theme</span>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => update({ theme: "dark" })}
+                className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
+                  settings.theme === "dark"
+                    ? "bg-brand-primary/10 border-brand-primary text-zinc-100"
+                    : "bg-surface-raised border-surface-border text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <div className={`p-2 rounded-md ${settings.theme === "dark" ? "bg-brand-primary text-white" : "bg-surface-overlay text-zinc-400"}`}>
+                  <Moon size={18} />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Dark Mode</p>
+                  <p className="text-xs text-zinc-500">Deep obsidian palette</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => update({ theme: "light" })}
+                className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
+                  settings.theme === "light"
+                    ? "bg-brand-primary/10 border-brand-primary text-zinc-900"
+                    : "bg-surface-raised border-surface-border text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <div className={`p-2 rounded-md ${settings.theme === "light" ? "bg-brand-primary text-white" : "bg-surface-overlay text-zinc-400"}`}>
+                  <Sun size={18} />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Light Mode</p>
+                  <p className="text-xs text-zinc-500">Crisp daylight palette</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      </Card>
+      </motion.div>
+
+      <motion.div variants={listItem}>
+      <Card>
         <CardHeader><CardTitle>Downloads</CardTitle></CardHeader>
         <div className="flex flex-col gap-4">
           {/* Download Location */}
@@ -311,6 +359,12 @@ export function SettingsPage() {
             </div>
             <span className="text-xs text-zinc-600">Where new downloads are saved. Leave default to use the system Downloads folder.</span>
           </div>
+
+          <Toggle
+            label="Always ask where to save each download"
+            checked={settings.askLocationEachTime}
+            onChange={(v) => update({ askLocationEachTime: v })}
+          />
 
           <div className="border-t border-surface-border/50 -mx-4 my-1" />
 
@@ -507,6 +561,27 @@ export function SettingsPage() {
           />
           <p className="text-xs text-zinc-600 -mt-2">
             Off by default. The old app disabled TLS verification unconditionally for every social-media download — this app never does that unless you explicitly opt in here.
+          </p>
+
+          <div className="border-t border-surface-border/50 -mx-4 my-1" />
+
+          {/* Default Audio Format */}
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm text-zinc-300">Default audio download format</span>
+            <select
+              value={settings.defaultAudioFormat || "mp3"}
+              onChange={(e) => update({ defaultAudioFormat: e.target.value })}
+              className="bg-surface-raised border border-surface-border rounded-lg px-3 py-2 text-sm text-zinc-100 focus-ring"
+            >
+              <option value="mp3">MP3 (Universal compatibility, 320 kbps)</option>
+              <option value="m4a">M4A / AAC (High quality, Apple devices)</option>
+              <option value="flac">FLAC (Lossless studio quality)</option>
+              <option value="wav">WAV (Uncompressed PCM)</option>
+              <option value="opus">OPUS (Modern low-latency streaming)</option>
+            </select>
+          </label>
+          <p className="text-xs text-zinc-600 -mt-2">
+            The fallback format used whenever downloading audio or songs from YouTube, TikTok, and other platforms without a specific codec preference.
           </p>
 
           <div className="border-t border-surface-border/50 -mx-4 my-1" />

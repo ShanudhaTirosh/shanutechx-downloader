@@ -1,6 +1,7 @@
 import { useState, type ClipboardEvent, useRef } from "react";
 import { motion } from "framer-motion";
-import { Plus, Link2, Clipboard, Calendar } from "lucide-react";
+import { Plus, Link2, Clipboard, Calendar, FolderOpen, X } from "lucide-react";
+import clsx from "clsx";
 import { Button } from "../ui/Button";
 import { useDownloadsStore } from "../../stores/downloadsStore";
 import { useToast } from "../ui/Toast";
@@ -38,6 +39,7 @@ function isValidUrl(value: string): boolean {
 
 export function AddUrlBar() {
   const [url, setUrl] = useState("");
+  const [customDir, setCustomDir] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -49,6 +51,18 @@ export function AddUrlBar() {
 
   function triggerShake() {
     setShakeKey((k) => k + 1);
+  }
+
+  async function handleSelectDirectory() {
+    try {
+      const res = await ipc.invoke("app:selectDirectory", { title: "Select Download Folder" });
+      if (res.dirPath) {
+        setCustomDir(res.dirPath);
+        showToast(`Save location set: ${res.dirPath}`, "info");
+      }
+    } catch {
+      showToast("Could not open directory picker", "error");
+    }
   }
 
   async function handlePasteButton() {
@@ -98,7 +112,7 @@ export function AddUrlBar() {
         // pasted list of 20 URLs would be unusable. If the same URL is in
         // there twice, both get added; if that's ever a problem in
         // practice, dedupe here.
-        await addUrl(u, true);
+        await addUrl(u, true, customDir || undefined);
         added += 1;
       } catch {
         // keep going — one bad URL in a batch shouldn't stop the rest
@@ -114,7 +128,7 @@ export function AddUrlBar() {
 
   async function submit(targetUrl: string, allowDuplicate = false) {
     try {
-      await addUrl(targetUrl, allowDuplicate);
+      await addUrl(targetUrl, allowDuplicate, customDir || undefined);
       setUrl("");
       showToast("Download added successfully!", "success", 3000);
     } catch (error) {
@@ -210,8 +224,58 @@ export function AddUrlBar() {
           onChange={(e) => setUrl(e.target.value)}
           onPaste={handleMultiUrlPaste as unknown as React.ClipboardEventHandler<HTMLInputElement>}
           placeholder="Paste a direct file URL — or a list of URLs, one per line, to add them all…"
-          className="flex-1 bg-transparent outline-none text-sm text-zinc-100 placeholder:text-zinc-600 py-2"
+          className="flex-1 bg-transparent outline-none text-sm text-zinc-100 placeholder:text-zinc-600 py-2 min-w-0"
         />
+
+        {/* Clear URL button */}
+        {url.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setUrl("");
+              inputRef.current?.focus();
+            }}
+            title="Clear URL"
+            className="h-7 w-7 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-surface-raised-hover transition-colors shrink-0"
+          >
+            <X size={14} />
+          </button>
+        )}
+
+        {/* Selected custom directory badge */}
+        {customDir && (
+          <span
+            className="flex items-center gap-1.5 text-xs text-brand-secondary bg-brand-secondary/10 px-2.5 py-1 rounded-md border border-brand-secondary/20 max-w-[160px] truncate shrink-0"
+            title={`Saving to: ${customDir}`}
+          >
+            <FolderOpen size={12} className="shrink-0 text-brand-secondary" />
+            <span className="truncate">{customDir.split(/[\\/]/).pop() || customDir}</span>
+            <button
+              type="button"
+              onClick={() => setCustomDir(null)}
+              className="text-zinc-400 hover:text-zinc-200 ml-0.5 focus:outline-none"
+              title="Reset to default download folder"
+            >
+              <X size={11} />
+            </button>
+          </span>
+        )}
+
+        {/* Custom Folder button */}
+        <button
+          type="button"
+          onClick={handleSelectDirectory}
+          title={customDir ? `Saving to: ${customDir} (click to change)` : "Choose custom download folder"}
+          className={clsx(
+            "h-8 w-8 flex items-center justify-center rounded-lg transition-colors focus-ring shrink-0",
+            customDir
+              ? "text-brand-secondary bg-brand-secondary/15 hover:bg-brand-secondary/25"
+              : "text-zinc-500 hover:text-zinc-100 hover:bg-surface-raised-hover"
+          )}
+        >
+          <FolderOpen size={15} />
+        </button>
+
         {/* Paste button */}
         <button
           type="button"
