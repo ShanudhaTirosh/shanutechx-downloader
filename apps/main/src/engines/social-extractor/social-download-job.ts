@@ -1,4 +1,5 @@
 import path from "node:path";
+import fs from "node:fs";
 import { runProcess } from "../../utils/spawn-process";
 import { reserveUniqueFilepath } from "../../utils/filename";
 
@@ -166,12 +167,13 @@ export class SocialDownloadJob {
 
     // Configure FFmpeg location for stream muxing and audio postprocessing
     if (this.ffmpegPath) {
-      args.push("--ffmpeg-location", this.ffmpegPath);
+      args.push("--ffmpeg-location", path.dirname(this.ffmpegPath));
     }
 
     // Ensure video merges use containers that natively support thumbnails and chapters
     if (!this.isAudioExtract) {
       args.push("--merge-output-format", "mp4/mkv");
+      args.push("--remux-video", "mkv/mp4");
     }
 
     // Audio extraction mode
@@ -192,7 +194,7 @@ export class SocialDownloadJob {
     const canEmbedThumbnail =
       this.autoEmbedThumbnail &&
       !this.retriedWithoutThumbnail &&
-      !(this.isAudioExtract && this.audioFormat === "wav");
+      !(this.isAudioExtract && (this.audioFormat === "wav" || this.audioFormat === "aac"));
 
     if (canEmbedThumbnail) {
       args.push("--embed-thumbnail", "--convert-thumbnails", "jpg");
@@ -315,11 +317,29 @@ export class SocialDownloadJob {
       }
 
       // Auto-recovery 3: Postprocessing thumbnail embedding unsupported for container
-      if (this.autoEmbedThumbnail && !this.retriedWithoutThumbnail && isThumbnailErr) {
-        console.warn(`[social-job:${this.id}] Postprocessing: thumbnail embedding not supported for this format. Retrying without thumbnail...`);
-        this.retriedWithoutThumbnail = true;
-        this.autoEmbedThumbnail = false;
-        return await this.runInternal(events, true);
+      if (isThumbnailErr) {
+        // If the audio or video file is already on disk and non-empty, the download succeeded;
+        // only the thumbnail embedding metadata tag step failed.
+        if (this.filepath && fs.existsSync(this.filepath)) {
+          try {
+            const stat = fs.statSync(this.filepath);
+            if (stat.size > 0) {
+              console.info(`[social-job:${this.id}] Thumbnail embedding postprocessing failed, but file exists on disk (${stat.size} bytes). Marking complete.`);
+              if (this.lastKnownSizeBytes !== null) events.onProgress(this.lastKnownSizeBytes, this.lastKnownSizeBytes);
+              events.onStatus("complete");
+              return;
+            }
+          } catch {
+            // fall through to retry
+          }
+        }
+
+        if (!this.retriedWithoutThumbnail) {
+          console.warn(`[social-job:${this.id}] Postprocessing: thumbnail embedding not supported for this format. Retrying without thumbnail...`);
+          this.retriedWithoutThumbnail = true;
+          this.autoEmbedThumbnail = false;
+          return await this.runInternal(events, true);
+        }
       }
 
       events.onStatus("failed", err instanceof Error ? err.message : String(err));

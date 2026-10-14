@@ -10,5 +10,30 @@
 // "development" — without it, the app falls through to loadFile() and
 // looks for a renderer/dist build that doesn't exist yet in dev mode.
 process.env.NODE_ENV = process.env.NODE_ENV || "development";
+
+if (process.env.NODE_ENV === "development") {
+  const fs = require("fs");
+  const { app } = require("electron");
+
+  let reloadTimeout = null;
+  try {
+    fs.watch(__dirname, { recursive: true }, (event, filename) => {
+      if (filename && (filename.endsWith(".ts") || filename.endsWith(".js") || filename.endsWith(".json"))) {
+        // Exclude generated preload bundle
+        if (filename.includes("preload.js")) return;
+        if (reloadTimeout) clearTimeout(reloadTimeout);
+        reloadTimeout = setTimeout(() => {
+          console.log(`[dev-reload] File changed: ${filename}, relaunching Electron...`);
+          app.relaunch();
+          app.exit(0);
+        }, 500);
+      }
+    });
+  } catch (err) {
+    console.warn("[dev-reload] Failed to initialize file watcher:", err);
+  }
+}
+
 require("tsx/cjs");
 require("./main.ts");
+
