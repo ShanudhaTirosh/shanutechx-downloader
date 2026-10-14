@@ -272,14 +272,14 @@ export function TorrentsPage() {
         {/* Drag & Drop banner */}
         <div
           onClick={handleBrowseTorrentFile}
-          className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all ${
+          className={`relative overflow-hidden rounded-xl border-2 border-dashed p-4 text-center cursor-pointer transition-all duration-200 group ${
             isDragging
-              ? "border-cyan-500 bg-cyan-500/10 shadow-lg shadow-cyan-500/10"
-              : "border-surface-border bg-surface-raised/40 hover:bg-surface-raised hover:border-cyan-500/40"
+              ? "border-cyan-500 bg-cyan-500/15 shadow-[0_0_25px_rgba(6,182,212,0.25)] scale-[1.01]"
+              : "border-white/10 hover:border-cyan-500/50 bg-[#12121a]/95 hover:bg-[#151524] shadow-lg"
           }`}
         >
-          <div className="flex items-center justify-center gap-2 text-xs text-zinc-400">
-            <Upload size={14} className="text-cyan-400" />
+          <div className="flex items-center justify-center gap-2 text-xs text-zinc-300 group-hover:text-white transition-colors">
+            <Upload size={14} className="text-cyan-400 group-hover:scale-110 transition-transform" />
             <span>Drag & drop .torrent files anywhere here, or click to browse</span>
           </div>
         </div>

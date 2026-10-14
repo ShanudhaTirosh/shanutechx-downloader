@@ -711,27 +711,45 @@ export function ConverterPage() {
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onClick={handleBrowse}
-            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
+            className={`relative overflow-hidden rounded-2xl border-2 border-dashed p-10 text-center cursor-pointer transition-all duration-200 group ${
               isDragging
-                ? "border-purple-500 bg-purple-500/10 shadow-lg shadow-purple-500/10"
-                : "border-surface-border bg-surface-raised/60 hover:bg-surface-raised hover:border-purple-500/40"
+                ? "border-purple-500 bg-purple-500/15 shadow-[0_0_30px_rgba(168,85,247,0.25)] scale-[1.01]"
+                : "border-white/10 hover:border-purple-500/50 bg-[#12121a]/95 hover:bg-[#151524] shadow-2xl"
             }`}
           >
-            <div className="flex flex-col items-center justify-center gap-3 max-w-md mx-auto">
-              <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
-                <Upload size={22} />
+            {/* Ambient background glow */}
+            <div className="absolute inset-0 bg-gradient-to-b from-purple-500/[0.08] via-transparent to-transparent pointer-events-none" />
+
+            <div className="relative z-10 flex flex-col items-center justify-center gap-3.5 max-w-lg mx-auto">
+              <div className="w-14 h-14 rounded-2xl bg-purple-500/10 border border-purple-500/25 flex items-center justify-center text-purple-400 group-hover:scale-110 group-hover:bg-purple-500/20 group-hover:text-purple-300 transition-all shadow-[0_0_20px_rgba(168,85,247,0.15)]">
+                <Upload size={24} className="stroke-[2.2]" />
               </div>
+
               <div>
-                <h3 className="text-base font-medium text-zinc-200 mb-1">
+                <h3 className="text-base font-semibold text-zinc-100 group-hover:text-white transition-colors">
                   Drag & drop your file here, or click to browse
                 </h3>
-                <p className="text-xs text-zinc-500">
-                  Supports MP4, MKV, AVI, MOV, WebM, MP3, WAV, FLAC, AAC, PNG, JPG, WebP, and 40+ more
+                <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed">
+                  Supports all major media formats · Fast offline local conversion
                 </p>
+                <div className="flex items-center justify-center gap-1.5 mt-3 flex-wrap">
+                  {["MP4", "MKV", "WebM", "MP3", "WAV", "FLAC", "AAC", "PNG", "JPG", "WebP"].map((fmt) => (
+                    <span
+                      key={fmt}
+                      className="px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.08] text-[10px] font-mono text-zinc-400"
+                    >
+                      {fmt}
+                    </span>
+                  ))}
+                  <span className="text-[10px] text-purple-400 font-medium px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20">
+                    +40 more
+                  </span>
+                </div>
               </div>
-              <Button variant="secondary" size="sm" className="mt-1 pointer-events-none">
-                <FolderOpen size={14} /> Select File
-              </Button>
+
+              <div className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 text-xs font-medium transition-all group-hover:border-purple-500/50 group-hover:shadow-[0_0_15px_rgba(168,85,247,0.2)]">
+                <FolderOpen size={14} /> Select File from Computer
+              </div>
             </div>
           </div>
         ) : (
