@@ -85,6 +85,7 @@ export class SocialDownloadJob {
   private bypassCache = false;
   private retriedForbidden = false;
   private retriedCookie = false;
+  private retriedWithoutThumbnail = false;
 
   constructor(
     private id: string,
@@ -168,6 +169,11 @@ export class SocialDownloadJob {
       args.push("--ffmpeg-location", this.ffmpegPath);
     }
 
+    // Ensure video merges use containers that natively support thumbnails and chapters
+    if (!this.isAudioExtract) {
+      args.push("--merge-output-format", "mp4/mkv");
+    }
+
     // Audio extraction mode
     if (this.isAudioExtract) {
       args.push("-x");
@@ -182,7 +188,16 @@ export class SocialDownloadJob {
     // Use yt-dlp's built-in resume capability when restarting after a pause or retry.
     if (isContinue) args.push("--continue");
     if (this.ignoreCertificateErrors) args.push("--no-check-certificate");
-    if (this.autoEmbedThumbnail) args.push("--embed-thumbnail");
+
+    const canEmbedThumbnail =
+      this.autoEmbedThumbnail &&
+      !this.retriedWithoutThumbnail &&
+      !(this.isAudioExtract && this.audioFormat === "wav");
+
+    if (canEmbedThumbnail) {
+      args.push("--embed-thumbnail", "--convert-thumbnails", "jpg");
+    }
+
     if (this.subtitleLanguages.trim()) {
       args.push("--write-subs", "--embed-subs", "--sub-langs", this.subtitleLanguages.trim());
     }
@@ -277,6 +292,11 @@ export class SocialDownloadJob {
         errText.toLowerCase().includes("403") ||
         errText.toLowerCase().includes("forbidden");
 
+      const isThumbnailErr =
+        errText.toLowerCase().includes("supported filetypes") ||
+        errText.toLowerCase().includes("thumbnail embedding") ||
+        errText.toLowerCase().includes("embedthumbnail");
+
       // Auto-recovery 1: Cookie database locked / unreadable (Chrome running or DPAPI)
       if (this.useCookies && !this.retriedCookie && isCookieErr) {
         console.warn(`[social-job:${this.id}] Cookie database locked or inaccessible (${errText.slice(0, 160)}). Retrying download without browser cookies...`);
@@ -291,6 +311,14 @@ export class SocialDownloadJob {
         this.retriedForbidden = true;
         this.playerClient = "ios,android,web";
         this.bypassCache = true;
+        return await this.runInternal(events, true);
+      }
+
+      // Auto-recovery 3: Postprocessing thumbnail embedding unsupported for container
+      if (this.autoEmbedThumbnail && !this.retriedWithoutThumbnail && isThumbnailErr) {
+        console.warn(`[social-job:${this.id}] Postprocessing: thumbnail embedding not supported for this format. Retrying without thumbnail...`);
+        this.retriedWithoutThumbnail = true;
+        this.autoEmbedThumbnail = false;
         return await this.runInternal(events, true);
       }
 
