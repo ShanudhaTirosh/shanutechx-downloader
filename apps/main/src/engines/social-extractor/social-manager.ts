@@ -52,7 +52,13 @@ export class SocialManager {
     if (!allowDuplicate) {
       const existing = downloadsRepo.findActiveOrCompleteByUrl(url);
       if (existing) {
-        throw new Error(`DUPLICATE_URL:${existing.id}:${existing.filename || format.label}`);
+        const existingIsAudio = existing.format?.startsWith("audio") || (existing.filename && /\.(mp3|m4a|flac|wav|opus|aac)$/i.test(existing.filename));
+        const requestedIsAudio = format.id.startsWith("audio") || format.postprocessor === "extract-audio";
+        const isSameTrackType = Boolean(existingIsAudio) === Boolean(requestedIsAudio);
+
+        if (existing.format === format.id || isSameTrackType) {
+          throw new Error(`DUPLICATE_URL:${existing.id}:${existing.filename || format.label}`);
+        }
       }
     }
     const id = randomUUID();

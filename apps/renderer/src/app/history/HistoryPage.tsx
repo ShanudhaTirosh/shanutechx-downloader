@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCircle2, XCircle, XSquare, Trash2, History, Trash, FolderOpen, HardDrive } from "lucide-react";
+import { CheckCircle2, XCircle, XSquare, Trash2, History, Trash, FolderOpen, HardDrive, Play } from "lucide-react";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { useToast } from "../../components/ui/Toast";
@@ -251,6 +251,12 @@ function HistoryRow({ item, onRemove }: { item: DownloadRecord; onRemove: () => 
     if (!result.success) showToast("Couldn't find that file — it may have been moved or deleted", "error");
   }
 
+  async function handleOpenFile() {
+    if (!item.filepath) return;
+    const result = await ipc.invoke("app:openFile", { filepath: item.filepath });
+    if (!result.success) showToast("Couldn't find that file — it may have been moved or deleted", "error");
+  }
+
   return (
     <motion.div
       layout
@@ -259,7 +265,8 @@ function HistoryRow({ item, onRemove }: { item: DownloadRecord; onRemove: () => 
       animate="animate"
       exit="exit"
       whileHover={{ y: -1 }}
-      className="glass-panel glass-panel-hover flex items-center gap-3 px-4 py-3"
+      onDoubleClick={item.status === "complete" ? handleOpenFile : undefined}
+      className="glass-panel glass-panel-hover flex items-center gap-3 px-4 py-3 select-none cursor-default"
     >
       <Icon size={16} className={`shrink-0 ${iconColor}`} />
       <div className="flex-1 min-w-0">
@@ -272,16 +279,28 @@ function HistoryRow({ item, onRemove }: { item: DownloadRecord; onRemove: () => 
         </p>
       </div>
       {item.status === "complete" && item.filepath && (
-        <motion.button
-          onClick={handleShowInFolder}
-          whileHover={{ scale: 1.08 }}
-          whileTap={{ scale: 0.9 }}
-          transition={springs.snappy}
-          title="Show in folder"
-          className="h-8 w-8 flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-200 hover:bg-surface-raised-hover focus-ring transition-colors"
-        >
-          <FolderOpen size={14} />
-        </motion.button>
+        <div className="flex items-center gap-1">
+          <motion.button
+            onClick={handleOpenFile}
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.9 }}
+            transition={springs.snappy}
+            title="Open file / Play media"
+            className="h-8 w-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-emerald-400 hover:bg-surface-raised-hover focus-ring transition-colors"
+          >
+            <Play size={14} />
+          </motion.button>
+          <motion.button
+            onClick={handleShowInFolder}
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.9 }}
+            transition={springs.snappy}
+            title="Show in folder"
+            className="h-8 w-8 flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-200 hover:bg-surface-raised-hover focus-ring transition-colors"
+          >
+            <FolderOpen size={14} />
+          </motion.button>
+        </div>
       )}
       <motion.button
         onClick={onRemove}

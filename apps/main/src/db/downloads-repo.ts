@@ -1,3 +1,4 @@
+import path from "node:path";
 import { eq, desc, lte, and, isNotNull } from "drizzle-orm";
 import { getDb } from "./client";
 import { downloads, type DownloadRow } from "./schema";
@@ -101,10 +102,27 @@ export const downloadsRepo = {
    */
   complete(id: string, filepath: string, sizeBytes: number, avgSpeedBps: number): void {
     downloadsRepo._lastProgressWriteAt.delete(id);
+    const filename = filepath ? path.basename(filepath) : undefined;
     getDb().update(downloads).set({
-      status: "complete", filepath, sizeBytes, downloadedBytes: sizeBytes, avgSpeedBps,
+      status: "complete", filepath, ...(filename ? { filename } : {}), sizeBytes, downloadedBytes: sizeBytes, avgSpeedBps,
       completedAt: new Date().toISOString(),
     }).where(eq(downloads.id, id)).run();
+  },
+
+  updateFilepath(id: string, filepath: string): void {
+    const filename = filepath ? path.basename(filepath) : undefined;
+    getDb().update(downloads).set({
+      filepath,
+      ...(filename ? { filename } : {}),
+    }).where(eq(downloads.id, id)).run();
+  },
+
+  updateFilepathByOldPath(oldPath: string, newPath: string): void {
+    const filename = newPath ? path.basename(newPath) : undefined;
+    getDb().update(downloads).set({
+      filepath: newPath,
+      ...(filename ? { filename } : {}),
+    }).where(eq(downloads.filepath, oldPath)).run();
   },
 
   list(): DownloadRecord[] {

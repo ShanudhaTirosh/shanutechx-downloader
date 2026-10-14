@@ -214,10 +214,44 @@ export class SocialDownloadJob {
 
     const { promise, kill } = runProcess(this.ytDlpPath, args, {
       onStdoutLine: (line) => {
-        const destMatch = /Destination:\s+(.+)/.exec(line);
-        if (destMatch?.[1]) {
-          this.resolvedFilename = path.basename(destMatch[1].trim());
+        // 1. Merger destination: [Merger] Merging formats into "..."
+        const mergerMatch = /\[Merger\]\s+Merging formats into\s+["']?([^"'\r\n]+)["']?/i.exec(line);
+        if (mergerMatch?.[1]) {
+          this.resolvedFilename = path.basename(mergerMatch[1].trim());
           events.onFilename(this.resolvedFilename);
+        }
+
+        // 2. Audio extraction destination: [ExtractAudio] Destination: ...
+        const extractMatch = /\[ExtractAudio\]\s+Destination:\s+["']?([^"'\r\n]+)["']?/i.exec(line);
+        if (extractMatch?.[1]) {
+          this.resolvedFilename = path.basename(extractMatch[1].trim());
+          events.onFilename(this.resolvedFilename);
+        }
+
+        // 3. MoveFiles destination: [MoveFiles] Moving file .+ to "..."
+        const moveMatch = /\[MoveFiles\]\s+Moving file\s+.+?\s+to\s+["']?([^"'\r\n]+)["']?/i.exec(line);
+        if (moveMatch?.[1]) {
+          this.resolvedFilename = path.basename(moveMatch[1].trim());
+          events.onFilename(this.resolvedFilename);
+        }
+
+        // 4. Already downloaded: [download] ... has already been downloaded
+        const alreadyMatch = /\[download\]\s+["']?([^"'\r\n]+)["']?\s+has already been downloaded/i.exec(line);
+        if (alreadyMatch?.[1]) {
+          this.resolvedFilename = path.basename(alreadyMatch[1].trim());
+          events.onFilename(this.resolvedFilename);
+        }
+
+        // 5. Standard Destination: ...
+        const destMatch = /(?:Destination:\s+|Adding thumbnail to\s+["']?)([^"'\r\n]+)/i.exec(line);
+        if (destMatch?.[1]) {
+          const fname = path.basename(destMatch[1].trim());
+          // Don't overwrite a finalized merged name (.mp4/.mkv/.mp3) with an intermediate stream fragment (.f251.webm)
+          const currentIsFinal = this.resolvedFilename && /\.(mp4|mkv|mp3|m4a|flac|wav)$/i.test(this.resolvedFilename);
+          if (!currentIsFinal || !fname.includes(".f")) {
+            this.resolvedFilename = fname;
+            events.onFilename(this.resolvedFilename);
+          }
         }
         const progressMatch = PROGRESS_RE.exec(line);
         if (progressMatch?.[1] && progressMatch[2] && progressMatch[3]) {
@@ -267,6 +301,7 @@ export class SocialDownloadJob {
         events.onStatus("paused");
         return;
       }
+      this.verifyAndResolveFileOnDisk(events);
       if (this.lastKnownSizeBytes !== null) events.onProgress(this.lastKnownSizeBytes, this.lastKnownSizeBytes);
       events.onStatus("complete");
     } catch (err: any) {
@@ -318,6 +353,7 @@ export class SocialDownloadJob {
 
       // Auto-recovery 3: Postprocessing thumbnail embedding unsupported for container
       if (isThumbnailErr) {
+        this.verifyAndResolveFileOnDisk(events);
         // If the audio or video file is already on disk and non-empty, the download succeeded;
         // only the thumbnail embedding metadata tag step failed.
         if (this.filepath && fs.existsSync(this.filepath)) {
@@ -343,6 +379,85 @@ export class SocialDownloadJob {
       }
 
       events.onStatus("failed", err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  /**
+   * Verifies that the resolved filename exists on disk and is non-empty.
+   * If yt-dlp merged formats (.mkv / .mp4), extracted audio (.mp3 / .m4a), or renamed
+   * intermediate streams (.f251.webm, .f247.webm) without a matching log, this scans
+   * saveDir to locate the real, finalized file and updates resolvedFilename and size.
+   */
+  private verifyAndResolveFileOnDisk(events: SocialDownloadEvents): void {
+    try {
+      if (this.filepath && fs.existsSync(this.filepath)) {
+        const stat = fs.statSync(this.filepath);
+        if (stat.isFile() && stat.size > 0) {
+          this.lastKnownSizeBytes = stat.size;
+          return;
+        }
+      }
+
+      if (!fs.existsSync(this.saveDir)) return;
+      const files = fs.readdirSync(this.saveDir);
+
+      const rawBase = this.resolvedFilename;
+      const cleanBase = rawBase
+        ? rawBase.replace(/\.f\d+(\.[^.]+)?$/i, "").replace(/\.[^.]+$/, "")
+        : "";
+
+      const ytIdMatch = /(?:v=|youtu\.be\/|shorts\/|embed\/)([a-zA-Z0-9_-]{11})/.exec(this.url);
+      const ytId = ytIdMatch?.[1];
+
+      const mediaExts = new Set([".mp4", ".mkv", ".webm", ".mov", ".mp3", ".m4a", ".flac", ".wav", ".opus", ".aac", ".ogg"]);
+      const candidates: { filename: string; fullPath: string; mtime: number; size: number }[] = [];
+
+      for (const file of files) {
+        if (file.endsWith(".part") || file.endsWith(".ytdl") || file.endsWith(".temp")) continue;
+        const ext = path.extname(file).toLowerCase();
+        if (!mediaExts.has(ext)) continue;
+
+        const full = path.join(this.saveDir, file);
+        try {
+          const st = fs.statSync(full);
+          if (!st.isFile() || st.size === 0) continue;
+
+          let matched = false;
+          if (cleanBase && file.startsWith(cleanBase)) {
+            matched = true;
+          } else if (ytId && file.includes(`[${ytId}]`)) {
+            matched = true;
+          }
+
+          if (matched) {
+            candidates.push({ filename: file, fullPath: full, mtime: st.mtimeMs, size: st.size });
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (candidates.length > 0) {
+        if (this.isAudioExtract) {
+          const audioExt = (this.audioFormat || "mp3").toLowerCase();
+          const audioCand = candidates.find((c) => c.filename.toLowerCase().endsWith("." + audioExt));
+          if (audioCand) {
+            this.resolvedFilename = audioCand.filename;
+            this.lastKnownSizeBytes = audioCand.size;
+            events.onFilename(this.resolvedFilename);
+            return;
+          }
+        }
+
+        candidates.sort((a, b) => b.mtime - a.mtime);
+        const best = candidates[0]!;
+        console.info(`[social-job:${this.id}] Resolved finalized file on disk: "${this.resolvedFilename}" -> "${best.filename}" (${best.size} bytes)`);
+        this.resolvedFilename = best.filename;
+        this.lastKnownSizeBytes = best.size;
+        events.onFilename(this.resolvedFilename);
+      }
+    } catch (e) {
+      console.warn(`[social-job:${this.id}] Error in verifyAndResolveFileOnDisk:`, e);
     }
   }
 

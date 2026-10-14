@@ -7,6 +7,7 @@ import { autoUpdater } from "electron-updater";
 import { request } from "undici";
 import { registerHandler } from "./index";
 import { getMissingBinaries, downloadMissingBinaries, ensureYtDlpBinary } from "../../utils/binary-manager";
+import { downloadsRepo } from "../../db/downloads-repo";
 
 // Read app version from our own package.json rather than calling app.getVersion().
 // In dev mode, app.getVersion() returns the Electron runtime version (e.g. 33.4.11)
@@ -296,9 +297,103 @@ export function registerAppHandlers(): void {
   });
 
   registerHandler("app:showInFolder", (req) => {
-    if (!req.filepath || !fs.existsSync(req.filepath)) return { success: false };
-    shell.showItemInFolder(req.filepath);
+    if (!req.filepath) return { success: false };
+    let targetPath = req.filepath;
+
+    if (!fs.existsSync(targetPath)) {
+      // Auto-heal path: if intermediate fragment suffix like .f251.webm was recorded, find real file (.mkv, .mp4, .mp3, etc.)
+      const dir = path.dirname(targetPath);
+      const rawBase = path.basename(targetPath);
+      const cleanBase = rawBase.replace(/\.f\d+(\.[^.]+)?$/i, "").replace(/\.[^.]+$/, "");
+      const idMatch = /\[([^\]]+)\]/.exec(rawBase);
+      const mediaId = idMatch?.[1];
+
+      try {
+        if (fs.existsSync(dir)) {
+          const files = fs.readdirSync(dir);
+          const mediaExts = new Set([".mp4", ".mkv", ".webm", ".mov", ".mp3", ".m4a", ".flac", ".wav", ".opus", ".aac", ".ogg"]);
+          const candidates = files.filter((f) => {
+            const ext = path.extname(f).toLowerCase();
+            if (!mediaExts.has(ext)) return false;
+            if (f.endsWith(".part") || f.endsWith(".ytdl")) return false;
+            if (mediaId && f.includes(`[${mediaId}]`)) return true;
+            if (cleanBase && f.startsWith(cleanBase)) return true;
+            return false;
+          });
+
+          if (candidates.length > 0) {
+            candidates.sort((a, b) => {
+              const statA = fs.statSync(path.join(dir, a));
+              const statB = fs.statSync(path.join(dir, b));
+              return statB.mtimeMs - statA.mtimeMs;
+            });
+            targetPath = path.join(dir, candidates[0]!);
+            try {
+              downloadsRepo.updateFilepathByOldPath(req.filepath, targetPath);
+            } catch {}
+          }
+        }
+      } catch (err) {
+        console.warn("Auto-heal showInFolder path failed:", err);
+      }
+    }
+
+    if (!fs.existsSync(targetPath)) {
+      // If the file still doesn't exist, but its parent directory exists, open the directory!
+      const dir = path.dirname(targetPath);
+      if (fs.existsSync(dir)) {
+        shell.openPath(dir);
+        return { success: true };
+      }
+      return { success: false };
+    }
+
+    shell.showItemInFolder(targetPath);
     return { success: true };
+  });
+
+  registerHandler("app:openFile", async (req) => {
+    if (!req.filepath) return { success: false, error: "No filepath provided" };
+    let targetPath = req.filepath;
+
+    if (!fs.existsSync(targetPath)) {
+      const dir = path.dirname(targetPath);
+      const rawBase = path.basename(targetPath);
+      const cleanBase = rawBase.replace(/\.f\d+(\.[^.]+)?$/i, "").replace(/\.[^.]+$/, "");
+      const idMatch = /\[([^\]]+)\]/.exec(rawBase);
+      const mediaId = idMatch?.[1];
+
+      try {
+        if (fs.existsSync(dir)) {
+          const files = fs.readdirSync(dir);
+          const mediaExts = new Set([".mp4", ".mkv", ".webm", ".mov", ".mp3", ".m4a", ".flac", ".wav", ".opus", ".aac", ".ogg"]);
+          const candidates = files.filter((f) => {
+            const ext = path.extname(f).toLowerCase();
+            if (!mediaExts.has(ext)) return false;
+            if (f.endsWith(".part") || f.endsWith(".ytdl")) return false;
+            if (mediaId && f.includes(`[${mediaId}]`)) return true;
+            if (cleanBase && f.startsWith(cleanBase)) return true;
+            return false;
+          });
+
+          if (candidates.length > 0) {
+            candidates.sort((a, b) => {
+              const statA = fs.statSync(path.join(dir, a));
+              const statB = fs.statSync(path.join(dir, b));
+              return statB.mtimeMs - statA.mtimeMs;
+            });
+            targetPath = path.join(dir, candidates[0]!);
+            try {
+              downloadsRepo.updateFilepathByOldPath(req.filepath, targetPath);
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+
+    if (!fs.existsSync(targetPath)) return { success: false, error: "File not found" };
+    const err = await shell.openPath(targetPath);
+    return { success: !err, error: err || undefined };
   });
 
   registerHandler("app:selectDirectory", async (req) => {

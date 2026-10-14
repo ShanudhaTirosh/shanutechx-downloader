@@ -278,6 +278,8 @@ export interface IpcInvokeMap {
   "app:downloadUpdate": { req: void; res: { success: boolean; message?: string } };
   /** Reveals the file in the OS file manager (Explorer/Finder/etc), selected. Silently no-ops if the path no longer exists. */
   "app:showInFolder": { req: { filepath: string }; res: { success: boolean } };
+  /** Opens the file using the OS default application (media player, etc.). */
+  "app:openFile": { req: { filepath: string }; res: { success: boolean; error?: string } };
   "app:selectDirectory": { req: { title?: string; defaultPath?: string }; res: { dirPath: string | null } };
 }
 

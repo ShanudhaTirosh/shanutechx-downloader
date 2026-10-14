@@ -58,6 +58,12 @@ export function DownloadCard({ item }: { item: DownloadRecord }) {
     if (!result.success) showToast("Couldn't find that file — it may have been moved or deleted", "error");
   }
 
+  async function handleOpenFile() {
+    if (!item.filepath) return;
+    const result = await ipc.invoke("app:openFile", { filepath: item.filepath });
+    if (!result.success) showToast("Couldn't find that file — it may have been moved or deleted", "error");
+  }
+
   async function handlePause() {
     if (isSocial) {
       useDownloadsStore.setState((s) => {
@@ -110,8 +116,9 @@ export function DownloadCard({ item }: { item: DownloadRecord }) {
       animate="animate"
       exit="exit"
       whileHover={{ y: -2 }}
+      onDoubleClick={item.status === "complete" ? handleOpenFile : undefined}
       className={clsx(
-        "glass-panel glass-panel-hover flex flex-col p-4 gap-3 relative overflow-hidden group",
+        "glass-panel glass-panel-hover flex flex-col p-4 gap-3 relative overflow-hidden group select-none cursor-default",
         isScheduled && "border-brand-secondary/40",
         isActive && "border-brand-primary/30 shadow-[0_0_20px_rgba(99,102,241,0.08)]",
       )}
@@ -162,7 +169,10 @@ export function DownloadCard({ item }: { item: DownloadRecord }) {
 
         <div className="flex items-center gap-1 shrink-0">
           {item.status === "complete" && item.filepath && (
-            <IconButton onClick={handleShowInFolder} title="Show in folder"><FolderOpen size={15} /></IconButton>
+            <>
+              <IconButton onClick={handleOpenFile} title="Open file / Play media"><Play size={15} /></IconButton>
+              <IconButton onClick={handleShowInFolder} title="Show in folder"><FolderOpen size={15} /></IconButton>
+            </>
           )}
           {/* Scheduled: show "Start Now" and Cancel */}
           {isScheduled && (
