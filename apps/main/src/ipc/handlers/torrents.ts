@@ -26,4 +26,7 @@ export function registerTorrentHandlers(torrents: TorrentEngine): void {
     torrents.remove(p.infoHash);
     return { success: true };
   });
+
+  registerHandler("torrents:pauseAll", () => torrents.pauseAll());
+  registerHandler("torrents:resumeAll", () => torrents.resumeAll());
 }

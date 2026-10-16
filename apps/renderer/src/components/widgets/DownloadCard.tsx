@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Pause, Play, X, CheckCircle2, XCircle, Loader2, FolderOpen, Clock } from "lucide-react";
+import { Pause, Play, X, CheckCircle2, XCircle, Loader2, FolderOpen, Clock, Zap } from "lucide-react";
 import clsx from "clsx";
 import type { DownloadRecord } from "@shanutechx/shared-types";
 import { ProgressRing } from "../ui/ProgressRing";
@@ -160,6 +160,11 @@ export function DownloadCard({ item }: { item: DownloadRecord }) {
                       </span>
                     )}
                   </>
+                )}
+                {item.segments > 1 && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 rounded">
+                    <Zap size={9} /> {item.segments} Threads
+                  </span>
                 )}
                 {item.errorMessage && <span className="text-status-danger truncate">· {item.errorMessage}</span>}
               </>

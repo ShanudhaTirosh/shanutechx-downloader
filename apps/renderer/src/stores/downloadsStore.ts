@@ -4,10 +4,14 @@ import { ipc } from "../lib/ipc-client";
 
 interface DownloadsState {
   items: Record<string, DownloadRecord>;
-  addUrl: (url: string, allowDuplicate?: boolean, saveDir?: string) => Promise<void>;
+  addUrl: (url: string, allowDuplicate?: boolean, saveDir?: string, segmentCount?: number) => Promise<void>;
+  batchAdd: (urls: string[], saveDir?: string, segmentCount?: number) => Promise<{ added: number }>;
   pause: (id: string) => Promise<void>;
   resume: (id: string) => Promise<void>;
   cancel: (id: string) => Promise<void>;
+  pauseAll: () => Promise<void>;
+  resumeAll: () => Promise<void>;
+  cancelAll: () => Promise<void>;
   refresh: () => Promise<void>;
   subscribe: () => () => void;
 }
@@ -21,15 +25,21 @@ interface DownloadsState {
 export const useDownloadsStore = create<DownloadsState>((set, get) => ({
   items: {},
 
-  addUrl: async (url, allowDuplicate, saveDir) => {
+  addUrl: async (url, allowDuplicate, saveDir, segmentCount) => {
     // Lets a DUPLICATE_URL rejection from the main process (see
     // QueueManager.start / shared-types) propagate up uncaught — callers
     // (AddUrlBar) pattern-match that prefix to offer "add anyway?" and
     // retry with allowDuplicate: true, rather than this store papering
     // over it as a silent success or a generic failure.
-    const { id } = await ipc.invoke("downloads:start", { url, allowDuplicate, saveDir });
+    const { id } = await ipc.invoke("downloads:start", { url, allowDuplicate, saveDir, segmentCount });
     await get().refresh(); // pick up the "queued" row immediately, before the first progress event
     void id;
+  },
+
+  batchAdd: async (urls, saveDir, segmentCount) => {
+    const res = await ipc.invoke("downloads:batchStart", { urls, saveDir, segmentCount });
+    await get().refresh();
+    return res;
   },
 
   pause: async (id) => {
@@ -55,6 +65,39 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
       return { items: { ...s.items, [id]: { ...existing, status: "cancelled", speedBps: 0 } } };
     });
     await ipc.invoke("downloads:cancel", { id });
+  },
+
+  pauseAll: async () => {
+    set((s) => {
+      const updated = { ...s.items };
+      for (const id in updated) {
+        if (updated[id]?.status === "downloading") {
+          updated[id] = { ...updated[id]!, status: "paused", speedBps: 0 };
+        }
+      }
+      return { items: updated };
+    });
+    await ipc.invoke("downloads:pauseAll", undefined);
+    await get().refresh();
+  },
+
+  resumeAll: async () => {
+    await ipc.invoke("downloads:resumeAll", undefined);
+    await get().refresh();
+  },
+
+  cancelAll: async () => {
+    set((s) => {
+      const updated = { ...s.items };
+      for (const id in updated) {
+        if (updated[id]?.status === "downloading" || updated[id]?.status === "queued" || updated[id]?.status === "paused") {
+          updated[id] = { ...updated[id]!, status: "cancelled", speedBps: 0 };
+        }
+      }
+      return { items: updated };
+    });
+    await ipc.invoke("downloads:cancelAll", undefined);
+    await get().refresh();
   },
 
   refresh: async () => {

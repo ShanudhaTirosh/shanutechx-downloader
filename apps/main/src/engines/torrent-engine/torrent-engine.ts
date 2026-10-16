@@ -7,6 +7,7 @@ import type { TorrentStatus } from "@shanutechx/shared-types";
 interface WTTorrent {
   infoHash: string; name: string; progress: number;
   downloadSpeed: number; uploadSpeed: number; downloaded: number; length: number;
+  uploaded?: number; path?: string;
   numPeers: number; done: boolean; paused: boolean;
   timeRemaining: number;
   on: (event: string, cb: (...args: unknown[]) => void) => void;
@@ -103,6 +104,26 @@ export class TorrentEngine {
     }
   }
 
+  pauseAll(): { count: number } {
+    let count = 0;
+    for (const t of this.torrents.values()) {
+      t.pause();
+      count++;
+    }
+    this.broadcastAll();
+    return { count };
+  }
+
+  resumeAll(): { count: number } {
+    let count = 0;
+    for (const t of this.torrents.values()) {
+      t.resume();
+      count++;
+    }
+    this.broadcastAll();
+    return { count };
+  }
+
   remove(infoHash: string): void {
     this.torrents.get(infoHash)?.destroy();
     this.torrents.delete(infoHash);
@@ -121,20 +142,27 @@ export class TorrentEngine {
     await new Promise<void>((resolve) => this.client!.destroy(() => resolve()));
   }
 
+  private broadcastAll(): void {
+    const win = this.getWindow();
+    if (!win) return;
+    for (const t of this.torrents.values()) {
+      win.webContents.send("torrent:status", toStatus(t));
+    }
+  }
+
   private pollStatus(): void {
     if (this.pollInterval) return;
     this.pollInterval = setInterval(() => {
       const now = Date.now();
       if (now - this.lastBroadcast < 1000) return;
       this.lastBroadcast = now;
-      const win = this.getWindow();
-      if (!win) return;
-      for (const t of this.torrents.values()) win.webContents.send("torrent:status", toStatus(t));
+      this.broadcastAll();
     }, 1000);
   }
 }
 
 function toStatus(t: WTTorrent): TorrentStatus {
+  const ratio = t.downloaded > 0 ? Math.round(((t.uploaded ?? 0) / t.downloaded) * 100) / 100 : 0;
   return {
     infoHash: t.infoHash,
     name: t.name || t.infoHash,
@@ -142,6 +170,7 @@ function toStatus(t: WTTorrent): TorrentStatus {
     downloadRateBps: t.downloadSpeed,
     uploadRateBps: t.uploadSpeed,
     totalDownloaded: t.downloaded,
+    totalUploaded: t.uploaded ?? 0,
     totalSize: t.length,
     numPeers: t.numPeers,
     // BUG FIX: a completed torrent was always reported as "finished", never
@@ -153,5 +182,7 @@ function toStatus(t: WTTorrent): TorrentStatus {
     // that state was never actually emitted.
     state: t.done ? (t.paused ? "paused" : "seeding") : t.paused ? "paused" : t.numPeers === 0 ? "downloading_metadata" : "downloading",
     etaSec: t.timeRemaining && Number.isFinite(t.timeRemaining) ? t.timeRemaining / 1000 : null,
+    ratio,
+    path: t.path,
   };
 }

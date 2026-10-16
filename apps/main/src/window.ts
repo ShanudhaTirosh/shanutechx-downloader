@@ -39,15 +39,13 @@ export function createMainWindow(): BrowserWindow {
     win.webContents.send("window:maximized-change", { maximized: false });
   });
 
-  // Real read-site for `minimizeToTray` — a genuine Tray icon + close-to-tray
-  // behavior, not a checkbox that's saved and never consulted. When enabled,
-  // closing the window hides it instead of quitting; the tray menu is the
-  // only way back in (besides re-launching), matching standard tray-app UX.
+  // Real read-site for `minimizeToTray` — when enabled, closing the window
+  // hides it to the system tray instead of quitting; the tray icon/menu
+  // provides quick access, live status, and quitting.
   win.on("close", (event) => {
     if (settingsStore.get().minimizeToTray && !(app as unknown as { isQuitting?: boolean }).isQuitting) {
       event.preventDefault();
       win.hide();
-      ensureTray(win);
     }
   });
 
@@ -74,23 +72,4 @@ export function createMainWindow(): BrowserWindow {
   }
 
   return win;
-}
-
-function ensureTray(win: BrowserWindow): void {
-  if (tray) return;
-  
-  // Use the application icon for the tray
-  const iconPath = isDev
-    ? path.join(__dirname, "../../../../build/icon.ico")
-    : path.join(process.resourcesPath, "icon.ico");
-  
-  const icon = nativeImage.createFromPath(iconPath);
-  tray = new Tray(icon.resize({ width: 16, height: 16 }));
-  tray.setToolTip("SHANUTECHX Downloader");
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: "Open SHANUTECHX Downloader", click: () => win.show() },
-    { type: "separator" },
-    { label: "Quit", click: () => { (app as unknown as { isQuitting?: boolean }).isQuitting = true; app.quit(); } },
-  ]));
-  tray.on("click", () => win.show());
 }

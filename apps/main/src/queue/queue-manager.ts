@@ -133,23 +133,37 @@ export class QueueManager {
     });
   }
 
-  start(url: string, saveDirOverride?: string, allowDuplicate?: boolean): { id: string } {
+  start(url: string, saveDirOverride?: string, allowDuplicate?: boolean, segmentCountOverride?: number): { id: string } {
     if (!allowDuplicate) {
       const existing = downloadsRepo.findActiveOrCompleteByUrl(url);
       if (existing) throw new Error(`DUPLICATE_URL:${existing.id}:${existing.filename || url}`);
     }
     const settings = settingsStore.get();
     const id = randomUUID();
-    downloadsRepo.insert({ id, url, filename: url, sourceType: "http", segments: settings.segmentCount });
+    const effectiveSegments = Math.max(1, Math.min(32, segmentCountOverride ?? settings.segmentCount));
+    downloadsRepo.insert({ id, url, filename: url, sourceType: "http", segments: effectiveSegments });
     void this.resolveSaveDir(settings, saveDirOverride).then((saveDir) => {
       if (this.active.size < settings.maxSimultaneousDownloads && isDownloadingAllowedNow(settings, new Date())) {
-        this.launch(id, url, saveDir, settings.segmentCount, settings.maxSpeedPerFileKBps);
+        this.launch(id, url, saveDir, effectiveSegments, settings.maxSpeedPerFileKBps);
       } else {
         this.queued.push(id);
         downloadsRepo.updateStatus(id, "queued");
       }
     });
     return { id };
+  }
+
+  batchStart(urls: string[], saveDirOverride?: string, segmentCountOverride?: number): { added: number; ids: string[] } {
+    const ids: string[] = [];
+    for (const url of urls) {
+      const trimmed = url.trim();
+      if (!trimmed) continue;
+      try {
+        const { id } = this.start(trimmed, saveDirOverride, true, segmentCountOverride);
+        ids.push(id);
+      } catch {}
+    }
+    return { added: ids.length, ids };
   }
 
   /**
@@ -289,6 +303,44 @@ export class QueueManager {
     this.broadcastStatus(id, "cancelled");
   }
 
+  pauseAll(): void {
+    for (const id of Array.from(this.active.keys())) {
+      this.pause(id);
+    }
+  }
+
+  resumeAll(): void {
+    const settings = settingsStore.get();
+    const list = downloadsRepo.list();
+    const paused = list.filter((r) => r.status === "paused" && r.sourceType === "http");
+    for (const rec of paused) {
+      if (this.active.has(rec.id)) {
+        this.resume(rec.id);
+      } else if (this.active.size < settings.maxSimultaneousDownloads && isDownloadingAllowedNow(settings, new Date())) {
+        this.launch(rec.id, rec.url, settings.downloadDir, rec.segments || settings.segmentCount, settings.maxSpeedPerFileKBps);
+      } else {
+        if (!this.queued.includes(rec.id)) this.queued.push(rec.id);
+        downloadsRepo.updateStatus(rec.id, "queued");
+        this.broadcastStatus(rec.id, "queued");
+      }
+    }
+    this.promoteNextQueued();
+  }
+
+  cancelAll(): void {
+    for (const id of Array.from(this.active.keys())) {
+      this.cancel(id);
+    }
+    for (const id of [...this.queued]) {
+      this.cancel(id);
+    }
+  }
+
+  getActiveStats(): { activeCount: number; queuedCount: number; speedBps: number } {
+    const speedBps = Array.from(this.currentSpeeds.values()).reduce((a, b) => a + b, 0);
+    return { activeCount: this.active.size, queuedCount: this.queued.length, speedBps };
+  }
+
   /** Called from the shutdown state machine's "pausing-active-transfers" phase. */
   async pauseAllForShutdown(): Promise<void> {
     for (const { job } of this.active.values()) job.pause();
@@ -329,10 +381,19 @@ export class QueueManager {
       this.lastGlobalSpeedBroadcast = now;
       const downBps = Array.from(this.currentSpeeds.values()).reduce((a, b) => a + b, 0);
       win?.webContents.send("queue:global-speed", { downBps, upBps: 0, activeCount: this.active.size });
+      this.speedListener?.(this.active.size, downBps);
     }
+  }
+
+  private speedListener: ((activeCount: number, speedBps: number) => void) | null = null;
+
+  setSpeedListener(cb: (activeCount: number, speedBps: number) => void): void {
+    this.speedListener = cb;
   }
 
   private broadcastStatus(id: string, status: string, errorMessage?: string): void {
     this.getWindow()?.webContents.send("download:status", { id, status, errorMessage });
+    const downBps = Array.from(this.currentSpeeds.values()).reduce((a, b) => a + b, 0);
+    this.speedListener?.(this.active.size, downBps);
   }
 }

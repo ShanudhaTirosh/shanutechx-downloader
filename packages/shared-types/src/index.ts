@@ -96,10 +96,13 @@ export interface TorrentStatus {
   downloadRateBps: number;
   uploadRateBps: number;
   totalDownloaded: number;
+  totalUploaded?: number;
   totalSize: number;
   numPeers: number;
   state: "queued" | "downloading_metadata" | "downloading" | "seeding" | "finished" | "paused" | "error";
   etaSec: number | null;
+  ratio?: number;
+  path?: string;
 }
 
 // ── Settings (every key here MUST have a real, tested read-site — see docs/quality-gates.md) ─
@@ -199,6 +202,10 @@ export interface IpcInvokeMap {
   "downloads:pause": { req: { id: string }; res: void };
   "downloads:resume": { req: { id: string }; res: void };
   "downloads:cancel": { req: { id: string }; res: void };
+  "downloads:pauseAll": { req: void; res: void };
+  "downloads:resumeAll": { req: void; res: void };
+  "downloads:cancelAll": { req: void; res: void };
+  "downloads:batchStart": { req: { urls: string[]; saveDir?: string; segmentCount?: number }; res: { added: number; ids: string[] } };
   "downloads:list": { req: void; res: DownloadRecord[] };
   /** Set or clear a scheduled start time on an existing download. Pass scheduledFor: null to start immediately. */
   "downloads:schedule": { req: { id: string; scheduledFor: string | null }; res: void };
@@ -226,6 +233,8 @@ export interface IpcInvokeMap {
   "torrents:pause": { req: { infoHash: string }; res: { success: boolean } };
   "torrents:resume": { req: { infoHash: string }; res: { success: boolean } };
   "torrents:remove": { req: { infoHash: string }; res: { success: boolean } };
+  "torrents:pauseAll": { req: void; res: { count: number } };
+  "torrents:resumeAll": { req: void; res: { count: number } };
 
   "converter:convert": { req: { inputPath: string; kind: "extract-audio" | "mux" }; res: { taskId: string } };
   "converter:universalConvert": { 

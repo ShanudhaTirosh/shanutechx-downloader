@@ -22,6 +22,8 @@ import { SocialManager } from "./engines/social-extractor/social-manager";
 import { TorrentEngine } from "./engines/torrent-engine/torrent-engine";
 import { ConverterManager } from "./engines/converter-engine/converter-manager";
 import { initializeBinaries } from "./utils/binary-manager";
+import { TrayManager } from "./tray/tray-manager";
+import { registerCompleteNotifier } from "./utils/download-complete-actions";
 
 log.initialize();
 log.info("SHANUTECHX Downloader starting…");
@@ -29,6 +31,7 @@ log.info("SHANUTECHX Downloader starting…");
 let mainWindow: BrowserWindow | null = null;
 let queueManager: QueueManager | null = null;
 let torrentEngine: TorrentEngine | null = null;
+let trayManager: TrayManager | null = null;
 
 function handleProtocolUrl(urlStr: string) {
   try {
@@ -87,6 +90,24 @@ if (isPrimaryInstance) {
     registerAllHandlers(queueManager, socialManager, torrentEngine, converterManager);
 
     mainWindow = createMainWindow();
+
+    // Initialize System Tray Manager
+    trayManager = new TrayManager(() => mainWindow, () => queueManager);
+    trayManager.init();
+
+    registerCompleteNotifier((filename) => {
+      trayManager?.notifyDownloadComplete(filename);
+    });
+
+    queueManager.setSpeedListener((activeCount, speedBps) => {
+      trayManager?.updateTray(activeCount, speedBps);
+    });
+
+    onSettingsChange((applied) => {
+      if (applied.minimizeToTray) {
+        trayManager?.init();
+      }
+    });
 
     // Check if launched directly with protocol URL
     const initialProtocol = process.argv.find((arg) => arg.startsWith("shanutechx://"));

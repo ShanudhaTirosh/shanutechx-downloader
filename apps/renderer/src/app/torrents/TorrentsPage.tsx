@@ -1,14 +1,31 @@
 import { useEffect, useState, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Magnet, Upload, FolderOpen, FileUp, X, CheckCircle2, ShieldCheck, DownloadCloud } from "lucide-react";
+import {
+  Magnet,
+  Upload,
+  FolderOpen,
+  FileUp,
+  X,
+  CheckCircle2,
+  ShieldCheck,
+  DownloadCloud,
+  Pause,
+  Play,
+  ArrowDown,
+  ArrowUp,
+  Zap,
+} from "lucide-react";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { TorrentCard } from "../../components/widgets/TorrentCard";
 import { ipc } from "../../lib/ipc-client";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useToast } from "../../components/ui/Toast";
+import { formatSpeed } from "../../lib/format";
 import { shake, shakeKeyframes, springs, staggerContainer } from "../../lib/motion";
 import type { TorrentStatus } from "@shanutechx/shared-types";
+
+type TorrentFilter = "all" | "downloading" | "seeding" | "paused";
 
 export function TorrentsPage() {
   const [magnet, setMagnet] = useState("");
@@ -16,6 +33,7 @@ export function TorrentsPage() {
   const [adding, setAdding] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
+  const [torrentFilter, setTorrentFilter] = useState<TorrentFilter>("all");
   const [torrents, setTorrents] = useState<Record<string, TorrentStatus>>({});
   const { settings, load } = useSettingsStore();
   const { showToast } = useToast();
@@ -165,7 +183,39 @@ export function TorrentsPage() {
     }
   }
 
+  async function handlePauseAll() {
+    try {
+      await ipc.invoke("torrents:pauseAll", undefined);
+      await refresh();
+      showToast("All torrents paused", "info");
+    } catch {
+      showToast("Failed to pause all torrents", "error");
+    }
+  }
+
+  async function handleResumeAll() {
+    try {
+      await ipc.invoke("torrents:resumeAll", undefined);
+      await refresh();
+      showToast("All torrents resumed", "success");
+    } catch {
+      showToast("Failed to resume all torrents", "error");
+    }
+  }
+
   const list = Object.values(torrents);
+  const totalDownBps = list.reduce((a, b) => a + (b.downloadRateBps || 0), 0);
+  const totalUpBps = list.reduce((a, b) => a + (b.uploadRateBps || 0), 0);
+  const downloadingList = list.filter((t) => t.state === "downloading" || t.state === "downloading_metadata");
+  const seedingList = list.filter((t) => t.state === "seeding");
+  const pausedList = list.filter((t) => t.state === "paused");
+
+  const filteredList = list.filter((t) => {
+    if (torrentFilter === "downloading") return t.state === "downloading" || t.state === "downloading_metadata";
+    if (torrentFilter === "seeding") return t.state === "seeding";
+    if (torrentFilter === "paused") return t.state === "paused";
+    return true;
+  });
 
   return (
     <div
@@ -174,13 +224,40 @@ export function TorrentsPage() {
       onDragLeave={handleDragLeave}
       className="w-full max-w-5xl mx-auto space-y-5 pb-10"
     >
-      <div>
-        <h1 className="text-xl font-semibold text-zinc-100 mb-1 flex items-center gap-2">
-          <Magnet size={20} className="text-cyan-400" /> Torrents
-        </h1>
-        <p className="text-sm text-zinc-400">
-          Pure peer-to-peer BitTorrent client with DHT, peer exchange, and live swarm tracking
-        </p>
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-zinc-100 mb-1 flex items-center gap-2">
+            <Magnet size={20} className="text-cyan-400" /> Torrents
+            {(totalDownBps > 0 || totalUpBps > 0) && (
+              <span className="flex items-center gap-2 text-xs font-mono ml-2">
+                {totalDownBps > 0 && (
+                  <span className="inline-flex items-center gap-1 text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-full">
+                    <ArrowDown size={11} /> {formatSpeed(totalDownBps)}
+                  </span>
+                )}
+                {totalUpBps > 0 && (
+                  <span className="inline-flex items-center gap-1 text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                    <ArrowUp size={11} /> {formatSpeed(totalUpBps)}
+                  </span>
+                )}
+              </span>
+            )}
+          </h1>
+          <p className="text-sm text-zinc-400">
+            Pure peer-to-peer BitTorrent client with DHT, peer exchange, and live swarm tracking
+          </p>
+        </div>
+
+        {list.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="secondary" onClick={handleResumeAll} title="Resume all torrents">
+              <Play size={14} /> Resume All
+            </Button>
+            <Button size="sm" variant="secondary" onClick={handlePauseAll} title="Pause all torrents">
+              <Pause size={14} /> Pause All
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Feature Pills */}
@@ -285,6 +362,41 @@ export function TorrentsPage() {
         </div>
       </div>
 
+      {/* Status Filter Pills */}
+      {list.length > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          {(
+            [
+              { id: "all", label: "All", count: list.length },
+              { id: "downloading", label: "Downloading", count: downloadingList.length },
+              { id: "seeding", label: "Seeding", count: seedingList.length },
+              { id: "paused", label: "Paused", count: pausedList.length },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setTorrentFilter(tab.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                torrentFilter === tab.id
+                  ? "bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 shadow-[0_0_12px_rgba(6,182,212,0.15)]"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-surface-raised border border-transparent"
+              }`}
+            >
+              <span>{tab.label}</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                  torrentFilter === tab.id
+                    ? "bg-cyan-500/25 text-cyan-200"
+                    : "bg-surface-raised-hover text-zinc-500"
+                }`}
+              >
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
       <AnimatePresence mode="wait">
         {list.length === 0 ? (
           <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -302,10 +414,19 @@ export function TorrentsPage() {
               </div>
             </Card>
           </motion.div>
+        ) : filteredList.length === 0 ? (
+          <motion.div key="none-filtered" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <Card className="text-center py-10 bg-surface-raised border border-surface-border">
+              <p className="text-sm text-zinc-400">No torrents match the &ldquo;{torrentFilter}&rdquo; filter</p>
+              <Button size="sm" variant="ghost" onClick={() => setTorrentFilter("all")} className="mt-2 text-xs">
+                Show all torrents
+              </Button>
+            </Card>
+          </motion.div>
         ) : (
           <motion.div key="list" variants={staggerContainer} initial="initial" animate="animate" className="flex flex-col gap-3">
             <AnimatePresence initial={false}>
-              {list.map((t) => (
+              {filteredList.map((t) => (
                 <TorrentCard key={t.infoHash} torrent={t} onPause={handlePause} onResume={handleResume} onRemove={handleRemove} />
               ))}
             </AnimatePresence>

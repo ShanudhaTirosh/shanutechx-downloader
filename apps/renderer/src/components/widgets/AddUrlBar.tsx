@@ -1,6 +1,6 @@
 import { useState, type ClipboardEvent, useRef } from "react";
 import { motion } from "framer-motion";
-import { Plus, Link2, Clipboard, Calendar, FolderOpen, X } from "lucide-react";
+import { Plus, Link2, Clipboard, Calendar, FolderOpen, X, Layers, Zap } from "lucide-react";
 import clsx from "clsx";
 import { Button } from "../ui/Button";
 import { useDownloadsStore } from "../../stores/downloadsStore";
@@ -9,6 +9,7 @@ import { useUiStore } from "../../stores/uiStore";
 import { shake, shakeKeyframes } from "../../lib/motion";
 import { ScheduleModal } from "./ScheduleModal";
 import { DuplicateDownloadModal } from "./DuplicateDownloadModal";
+import { BatchDownloadModal } from "./BatchDownloadModal";
 import { ipc } from "../../lib/ipc-client";
 
 // Common video/social media domains that should use Social Grab instead
@@ -41,9 +42,11 @@ function isValidUrl(value: string): boolean {
 export function AddUrlBar() {
   const [url, setUrl] = useState("");
   const [customDir, setCustomDir] = useState<string | null>(null);
+  const [segments, setSegments] = useState<number>(16);
   const [submitting, setSubmitting] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
   const [duplicateModal, setDuplicateModal] = useState<{
     open: boolean;
     url: string;
@@ -137,9 +140,9 @@ export function AddUrlBar() {
 
   async function submit(targetUrl: string, allowDuplicate = false) {
     try {
-      await addUrl(targetUrl, allowDuplicate, customDir || undefined);
+      await addUrl(targetUrl, allowDuplicate, customDir || undefined, segments);
       setUrl("");
-      showToast("Download added successfully!", "success", 3000);
+      showToast(`Download added (${segments} parallel streams)!`, "success", 3000);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to add download";
       const duplicateMatch = /^DUPLICATE_URL:/.exec(message);
@@ -208,6 +211,10 @@ export function AddUrlBar() {
 
   return (
     <>
+      <BatchDownloadModal
+        open={batchOpen}
+        onClose={() => setBatchOpen(false)}
+      />
       <ScheduleModal
         open={scheduleOpen}
         title="Schedule Download"
@@ -299,6 +306,21 @@ export function AddUrlBar() {
           <FolderOpen size={15} />
         </button>
 
+        {/* Acceleration Threads Selector button */}
+        <button
+          type="button"
+          onClick={() => {
+            const next = segments === 1 ? 4 : segments === 4 ? 8 : segments === 8 ? 16 : segments === 16 ? 32 : 1;
+            setSegments(next);
+            showToast(`Parallel streams set to ${next}x threads`, "info", 2000);
+          }}
+          title={`Parallel Connections: ${segments} threads (Click to cycle: 1, 4, 8, 16, 32)`}
+          className="h-8 px-2 flex items-center gap-1 rounded-lg text-xs font-semibold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 transition-colors focus-ring shrink-0"
+        >
+          <Zap size={13} className="text-cyan-400" />
+          <span>{segments}x</span>
+        </button>
+
         {/* Paste button */}
         <button
           type="button"
@@ -308,6 +330,17 @@ export function AddUrlBar() {
         >
           <Clipboard size={15} />
         </button>
+
+        {/* Batch multi-URL downloader modal button */}
+        <button
+          type="button"
+          onClick={() => setBatchOpen(true)}
+          title="Batch download multiple URLs"
+          className="h-8 w-8 flex items-center justify-center rounded-lg text-zinc-500 hover:text-brand-primary hover:bg-surface-raised-hover transition-colors focus-ring shrink-0"
+        >
+          <Layers size={15} />
+        </button>
+
         {/* Schedule button — opens datetime picker */}
         <button
           type="button"
@@ -320,6 +353,7 @@ export function AddUrlBar() {
         >
           <Calendar size={15} />
         </button>
+
         <Button type="submit" disabled={!url.trim() || submitting} loading={submitting} size="md">
           {!submitting && <Plus size={16} />} Add
         </Button>
