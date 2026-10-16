@@ -10,11 +10,13 @@ import { listItem, springs, staggerContainer } from "../../lib/motion";
 import type { DownloadRecord } from "@shanutechx/shared-types";
 
 type Filter = "all" | "complete" | "failed" | "cancelled";
+type SourceFilter = "all" | "http" | "social" | "torrent";
 
 export function HistoryPage() {
   const [items, setItems] = useState<DownloadRecord[]>([]);
   const [stats, setStats] = useState<{ totalCompleted: number; totalFailed: number; totalBytesDownloaded: number } | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [loading, setLoading] = useState(true);
   const { showToast } = useToast();
 
@@ -63,7 +65,11 @@ export function HistoryPage() {
     showToast(`Cleared ${toRemove.length} items from history`, "success");
   }
 
-  const filtered = filter === "all" ? items : items.filter((i) => i.status === filter);
+  const filtered = items.filter((i) => {
+    if (filter !== "all" && i.status !== filter) return false;
+    if (sourceFilter !== "all" && (i.sourceType || "http") !== sourceFilter) return false;
+    return true;
+  });
 
   return (
     <div className="w-full max-w-6xl mx-auto space-y-5 pb-10">
@@ -181,25 +187,56 @@ export function HistoryPage() {
         </div>
       )}
 
-      <div className="flex gap-2 mb-4 relative">
-        {(["all", "complete", "failed", "cancelled"] as Filter[]).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`relative text-xs px-3 py-1.5 rounded-lg capitalize transition-colors focus-ring ${
-              filter === f ? "text-white" : "text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            {filter === f && (
-              <motion.span
-                layoutId="history-filter-pill"
-                transition={springs.gentle}
-                className="absolute inset-0 bg-brand-gradient rounded-lg -z-10"
-              />
-            )}
-            {f} ({f === "all" ? items.length : items.filter(i => i.status === f).length})
-          </button>
-        ))}
+      {/* Filter controls: Status and Source */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="flex gap-1.5 p-1 rounded-xl bg-surface-raised/40 border border-border-subtle">
+          {(["all", "complete", "failed", "cancelled"] as Filter[]).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`relative text-xs px-3 py-1.5 rounded-lg capitalize transition-colors focus-ring ${
+                filter === f ? "text-white" : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              {filter === f && (
+                <motion.span
+                  layoutId="history-status-pill"
+                  transition={springs.gentle}
+                  className="absolute inset-0 bg-brand-gradient rounded-lg -z-10"
+                />
+              )}
+              {f} ({f === "all" ? items.length : items.filter(i => i.status === f).length})
+            </button>
+          ))}
+        </div>
+
+        <div className="flex gap-1.5 p-1 rounded-xl bg-surface-raised/40 border border-border-subtle">
+          {(
+            [
+              { id: "all", label: "All Sources" },
+              { id: "http", label: "Direct" },
+              { id: "social", label: "Social Grab" },
+              { id: "torrent", label: "Torrents" },
+            ] as const
+          ).map((sf) => (
+            <button
+              key={sf.id}
+              onClick={() => setSourceFilter(sf.id)}
+              className={`relative text-xs px-3 py-1.5 rounded-lg transition-colors focus-ring ${
+                sourceFilter === sf.id ? "text-white font-medium" : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              {sourceFilter === sf.id && (
+                <motion.span
+                  layoutId="history-source-pill"
+                  transition={springs.gentle}
+                  className="absolute inset-0 bg-white/10 rounded-lg -z-10 border border-white/15"
+                />
+              )}
+              {sf.label} ({sf.id === "all" ? items.length : items.filter(i => (i.sourceType || "http") === sf.id).length})
+            </button>
+          ))}
+        </div>
       </div>
 
       <AnimatePresence mode="wait">
@@ -270,7 +307,25 @@ function HistoryRow({ item, onRemove }: { item: DownloadRecord; onRemove: () => 
     >
       <Icon size={16} className={`shrink-0 ${iconColor}`} />
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-zinc-200 truncate">{item.filename || item.url}</p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm text-zinc-200 truncate">{item.filename || item.url}</p>
+          <span
+            className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
+              item.sourceType === "social"
+                ? "bg-fuchsia-500/15 text-fuchsia-400 border border-fuchsia-500/20"
+                : item.sourceType === "torrent"
+                ? "bg-amber-500/15 text-amber-400 border border-amber-500/20"
+                : "bg-blue-500/15 text-blue-400 border border-blue-500/20"
+            }`}
+          >
+            {item.sourceType === "social" ? (item.platform ? `${item.platform}` : "Social") : item.sourceType === "torrent" ? "Torrent" : "Direct"}
+          </span>
+          {item.quality && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 bg-surface-raised text-zinc-400 border border-border-subtle">
+              {item.quality}
+            </span>
+          )}
+        </div>
         <p className="text-xs text-zinc-500 mt-0.5">
           {formatBytes(item.sizeBytes)}
           {item.avgSpeedBps ? ` · avg ${formatBytes(item.avgSpeedBps)}/s` : ""}
