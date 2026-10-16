@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
+import os from "node:os";
 import { runProcess } from "../../utils/spawn-process";
 import { reserveUniqueFilepath } from "../../utils/filename";
 
@@ -142,7 +143,10 @@ export class SocialDownloadJob {
   }
 
   private async runInternal(events: SocialDownloadEvents, isContinue: boolean): Promise<void> {
-    const outputTemplate = path.join(this.saveDir, "%(title).150B [%(id)s].%(ext)s");
+    const appTempDir = path.join(os.tmpdir(), "shanutechx-downloader", "ytdlp-temp");
+    await fs.promises.mkdir(appTempDir, { recursive: true });
+
+    const outputTemplate = "%(title).150B [%(id)s].%(ext)s";
     const isYouTube = /(?:youtube\.com|youtu\.be)/i.test(this.url);
 
     const args = [
@@ -154,6 +158,8 @@ export class SocialDownloadJob {
       "--socket-timeout", "30",
       "--retries", "5",
       "--fragment-retries", "10",
+      "--paths", `home:${this.saveDir}`,
+      "--paths", `temp:${appTempDir}`,
       "-o", outputTemplate,
     ];
 
@@ -434,6 +440,17 @@ export class SocialDownloadJob {
           }
         } catch {
           // ignore
+        }
+      }
+
+      // Clean up any stray thumbnail image files left behind in the save directory
+      for (const file of files) {
+        if (/\.(jpe?g|webp|png)$/i.test(file)) {
+          if ((cleanBase && file.startsWith(cleanBase)) || (ytId && file.includes(`[${ytId}]`))) {
+            try {
+              fs.unlinkSync(path.join(this.saveDir, file));
+            } catch {}
+          }
         }
       }
 

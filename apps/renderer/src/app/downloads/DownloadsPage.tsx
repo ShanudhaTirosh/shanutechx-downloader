@@ -8,7 +8,9 @@ import { springs, staggerContainer } from "../../lib/motion";
 
 export function DownloadsPage() {
   const { items, refresh, subscribe } = useDownloadsStore();
-  const list = Object.values(items).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  const list = Object.values(items)
+    .filter((item) => item.sourceType === "http")
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 
   useEffect(() => {
     void refresh();

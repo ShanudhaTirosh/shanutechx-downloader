@@ -2,6 +2,7 @@ import { request, type Dispatcher } from "undici";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import { resolveMeta } from "./resolve-meta";
 import { reserveUniqueFilepath } from "../../utils/filename";
 import { TokenBucket } from "../../utils/token-bucket";
@@ -95,7 +96,7 @@ export class DownloadJob {
         ? Math.max(1, Math.min(this.requestedSegmentCount, 32, maxUsefulSegments))
         : 1;
 
-      const tempDir = path.join(this.saveDir, ".shanutechx-tmp");
+      const tempDir = path.join(os.tmpdir(), "shanutechx-downloader", "segments", this.id);
       await fsp.mkdir(tempDir, { recursive: true });
 
       this.segments = this.planSegments(segmentCount, tempDir);
@@ -257,5 +258,7 @@ export class DownloadJob {
 
   private async cleanupTemp(): Promise<void> {
     await Promise.all(this.segments.map((s) => fsp.unlink(s.tempPath).catch(() => {})));
+    const tempDir = path.join(os.tmpdir(), "shanutechx-downloader", "segments", this.id);
+    await fsp.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }
 }

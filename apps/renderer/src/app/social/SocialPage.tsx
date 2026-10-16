@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { AnimatePresence } from "framer-motion";
 import { 
   Link2, Search, Loader2, Download as DownloadIcon, Clipboard, Calendar, 
   FolderOpen, X, CheckCircle2, ShieldCheck, Music, Image as ImageIcon, 
@@ -17,6 +18,7 @@ import { useSettingsStore } from "../../stores/settingsStore";
 import { useUiStore } from "../../stores/uiStore";
 import { ScheduleModal } from "../../components/widgets/ScheduleModal";
 import { DuplicateDownloadModal } from "../../components/widgets/DuplicateDownloadModal";
+import { DownloadCard } from "../../components/widgets/DownloadCard";
 
 export function SocialPage() {
   const [mode, setMode] = useState<"single" | "batch">("single");
@@ -50,12 +52,22 @@ export function SocialPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const isExtractingRef = useRef(false);
   const isDownloadingRef = useRef(false);
+  const items = useDownloadsStore((s) => s.items);
   const refresh = useDownloadsStore((s) => s.refresh);
+  const subscribe = useDownloadsStore((s) => s.subscribe);
   const { settings, load: loadSettings } = useSettingsStore();
   const setActiveTab = useUiStore((s) => s.setActiveTab);
   const { showToast } = useToast();
 
-  useEffect(() => { void loadSettings(); }, [loadSettings]);
+  useEffect(() => {
+    void loadSettings();
+    void refresh();
+    return subscribe();
+  }, [loadSettings, refresh, subscribe]);
+
+  const socialDownloads = Object.values(items)
+    .filter((d) => d.sourceType === "social")
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 
   // Real read-site for defaultVideoQuality — used to highlight the row that
   // matches the user's configured preference, e.g. "1080p", once info loads.
@@ -132,7 +144,6 @@ export function SocialPage() {
         `Started downloading "${info?.title || "media"}" in ${format.label}`,
         "success", 4000,
       );
-      setTimeout(() => setActiveTab("downloads"), 1500);
     } catch (err: any) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       if (errorMsg.includes("DUPLICATE_URL")) {
@@ -169,7 +180,6 @@ export function SocialPage() {
         `Scheduled "${info?.title || "media"}" (${format.label}) for ${when}`,
         "success", 6000,
       );
-      setActiveTab("downloads");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to schedule", "error");
     }
@@ -293,7 +303,6 @@ export function SocialPage() {
 
     await refresh();
     showToast(`Started batch download for ${queuedCount} items`, "success");
-    setTimeout(() => setActiveTab("downloads"), 1500);
   }
 
   return (
@@ -773,6 +782,26 @@ export function SocialPage() {
             </div>
           )}
         </Card>
+      )}
+
+      {/* Active & Recent Social Downloads Section */}
+      {socialDownloads.length > 0 && (
+        <div className="space-y-3 pt-6 border-t border-surface-border/60">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <DownloadIcon size={16} className="text-brand-secondary" />
+              <h2 className="text-sm font-semibold text-zinc-200">Social Downloads</h2>
+              <span className="text-xs text-zinc-500 font-mono">({socialDownloads.length})</span>
+            </div>
+          </div>
+          <div className="flex flex-col gap-3">
+            <AnimatePresence initial={false}>
+              {socialDownloads.map((item) => (
+                <DownloadCard key={item.id} item={item} />
+              ))}
+            </AnimatePresence>
+          </div>
+        </div>
       )}
 
       {schedulingFormat && (
