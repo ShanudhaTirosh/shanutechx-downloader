@@ -126,7 +126,7 @@ export function SettingsPage() {
   const allBinariesPresent = binariesStatus && !binariesStatus.ytdlp && !binariesStatus.ffmpeg && !binariesStatus.ffprobe;
 
   return (
-    <motion.div variants={staggerContainer} initial="initial" animate="animate" className="max-w-2xl flex flex-col gap-5">
+    <motion.div variants={staggerContainer} initial="initial" animate="animate" className="w-full max-w-4xl mx-auto flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-semibold text-zinc-100 mb-1">Settings</h1>
         <p className="text-sm text-zinc-500">

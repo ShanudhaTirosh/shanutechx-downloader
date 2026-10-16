@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { LayoutDashboard, Download, Clapperboard, Magnet, AudioLines, Settings, ChevronsLeft, Pin } from "lucide-react";
+import { LayoutDashboard, Download, Clapperboard, Magnet, AudioLines, History as HistoryIcon, Settings, ChevronsLeft, Pin } from "lucide-react";
 import clsx from "clsx";
 import { useUiStore, type TabId } from "../../stores/uiStore";
 import { springs } from "../../lib/motion";
@@ -11,6 +11,7 @@ const NAV_ITEMS: { id: TabId; label: string; icon: typeof LayoutDashboard }[] = 
   { id: "social", label: "Social Grab", icon: Clapperboard },
   { id: "torrents", label: "Torrents", icon: Magnet },
   { id: "converter", label: "Converter", icon: AudioLines },
+  { id: "history", label: "History", icon: HistoryIcon },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 

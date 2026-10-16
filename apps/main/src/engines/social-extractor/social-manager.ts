@@ -322,28 +322,31 @@ export class SocialManager {
     const job = this.jobs.get(id);
     if (job) {
       job.pause();
-      // Status event will be emitted by the job once the yt-dlp process exits.
     }
+    downloadsRepo.updateStatus(id, "paused");
+    this.getWindow()?.webContents.send("download:status", { id, status: "paused" });
   }
 
   resume(id: string): void {
     const job = this.jobs.get(id);
     if (job) {
       job.resume();
-      // Status event will be emitted by the job when yt-dlp restarts.
     }
+    downloadsRepo.updateStatus(id, "downloading");
+    this.getWindow()?.webContents.send("download:status", { id, status: "downloading" });
   }
 
   cancel(id: string): void {
-    // If it's still in the scheduled-but-not-started state, remove from
-    // the in-memory map and cancel the DB row.
     if (this.scheduledFormats.has(id)) {
       this.scheduledFormats.delete(id);
-      downloadsRepo.updateStatus(id, "cancelled");
-      this.getWindow()?.webContents.send("download:status", { id, status: "cancelled" });
-      return;
     }
-    this.jobs.get(id)?.cancel();
+    const job = this.jobs.get(id);
+    if (job) {
+      this.jobs.delete(id);
+      job.cancel();
+    }
+    downloadsRepo.updateStatus(id, "cancelled");
+    this.getWindow()?.webContents.send("download:status", { id, status: "cancelled" });
   }
 
   destroy(): void {

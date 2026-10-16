@@ -11,6 +11,7 @@ import { DownloadsPage } from "./app/downloads/DownloadsPage";
 import { SocialPage } from "./app/social/SocialPage";
 import { TorrentsPage } from "./app/torrents/TorrentsPage";
 import { ConverterPage } from "./app/converter/ConverterPage";
+import { HistoryPage } from "./app/history/HistoryPage";
 import { SettingsPage } from "./app/settings/SettingsPage";
 
 const PAGES = {
@@ -19,7 +20,7 @@ const PAGES = {
   social: SocialPage,
   torrents: TorrentsPage,
   converter: ConverterPage,
-  history: DashboardPage,
+  history: HistoryPage,
   settings: SettingsPage,
 } as const;
 
@@ -37,17 +38,20 @@ export default function App() {
   return (
     <ToastProvider>
       <AppShell>
-        <ErrorBoundary key={activeTab}>
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.14, ease: "easeOut" }}
-          >
-            <Page />
-          </motion.div>
-        </ErrorBoundary>
+        <AnimatePresence mode="wait">
+          <ErrorBoundary key={activeTab}>
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.14, ease: "easeOut" }}
+              className="w-full"
+            >
+              <Page />
+            </motion.div>
+          </ErrorBoundary>
+        </AnimatePresence>
         <UpdateModal />
       </AppShell>
     </ToastProvider>

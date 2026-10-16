@@ -15,7 +15,7 @@ export const useUiStore = create<UiState>((set) => ({
   activeTab: "dashboard",
   sidebarExpanded: true,
   commandPaletteOpen: false,
-  setActiveTab: (tab) => set({ activeTab: tab === "history" ? "dashboard" : tab }),
+  setActiveTab: (tab) => set({ activeTab: tab }),
   toggleSidebar: () => set((s) => ({ sidebarExpanded: !s.sidebarExpanded })),
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
 }));

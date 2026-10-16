@@ -66,7 +66,7 @@ export function HistoryPage() {
   const filtered = filter === "all" ? items : items.filter((i) => i.status === filter);
 
   return (
-    <div className="max-w-4xl">
+    <div className="w-full max-w-6xl mx-auto space-y-5 pb-10">
       <div className="flex items-end justify-between mb-4">
         <div>
           <motion.h1

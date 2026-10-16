@@ -533,7 +533,7 @@ export function ConverterPage() {
   const hasFinishedTasks = tasks.some((t) => t.status !== "converting");
 
   return (
-    <div className="max-w-4xl space-y-5 pb-12">
+    <div className="w-full max-w-5xl mx-auto space-y-5 pb-12">
       {/* Header */}
       <div>
         <h1 className="text-xl font-semibold text-zinc-100 mb-1 flex items-center gap-2">

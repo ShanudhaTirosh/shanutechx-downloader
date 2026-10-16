@@ -172,7 +172,7 @@ export function TorrentsPage() {
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
-      className="max-w-3xl space-y-5 pb-10"
+      className="w-full max-w-5xl mx-auto space-y-5 pb-10"
     >
       <div>
         <h1 className="text-xl font-semibold text-zinc-100 mb-1 flex items-center gap-2">

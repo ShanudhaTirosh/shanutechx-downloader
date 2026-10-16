@@ -275,9 +275,13 @@ export class QueueManager {
     this.autoPausedIds.delete(id);
     const entry = this.active.get(id);
     if (entry) {
+      this.active.delete(id);
+      this.lastSample.delete(id);
+      this.currentSpeeds.delete(id);
       entry.job.cancel();
       downloadsRepo.updateStatus(id, "cancelled");
       this.broadcastStatus(id, "cancelled");
+      this.promoteNextQueued();
       return;
     }
     this.queued = this.queued.filter((qid) => qid !== id);

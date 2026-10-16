@@ -297,7 +297,7 @@ export function SocialPage() {
   }
 
   return (
-    <div className="max-w-3xl space-y-5 pb-10">
+    <div className="w-full max-w-5xl mx-auto space-y-5 pb-10">
       {/* Schedule Modal */}
       <ScheduleModal
         open={schedulingFormat !== null}
@@ -661,9 +661,11 @@ export function SocialPage() {
                     <Button
                       size="sm"
                       onClick={handleDownloadCustomAudio}
+                      disabled={downloadingIds.has(`audio-${audioFormatExt}-${audioBitrate}`)}
+                      loading={downloadingIds.has(`audio-${audioFormatExt}-${audioBitrate}`)}
                       className="bg-emerald-600 hover:bg-emerald-500 text-white"
                     >
-                      <Music size={14} /> Download Audio ({audioFormatExt.toUpperCase()} {audioBitrate})
+                      {!downloadingIds.has(`audio-${audioFormatExt}-${audioBitrate}`) && <Music size={14} />} Download Audio ({audioFormatExt.toUpperCase()} {audioBitrate})
                     </Button>
                   </div>
                 </div>

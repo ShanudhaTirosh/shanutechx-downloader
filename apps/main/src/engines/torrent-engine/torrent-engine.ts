@@ -39,6 +39,7 @@ export class TorrentEngine {
   private client: WTClient | null = null;
   private torrents = new Map<string, WTTorrent>();
   private lastBroadcast = 0;
+  private pollInterval: NodeJS.Timeout | null = null;
 
   constructor(private getWindow: () => BrowserWindow | null) {}
 
@@ -86,8 +87,22 @@ export class TorrentEngine {
     });
   }
 
-  pause(infoHash: string): void { this.torrents.get(infoHash)?.pause(); }
-  resume(infoHash: string): void { this.torrents.get(infoHash)?.resume(); }
+  pause(infoHash: string): void {
+    const t = this.torrents.get(infoHash);
+    if (t) {
+      t.pause();
+      this.getWindow()?.webContents.send("torrent:status", toStatus(t));
+    }
+  }
+
+  resume(infoHash: string): void {
+    const t = this.torrents.get(infoHash);
+    if (t) {
+      t.resume();
+      this.getWindow()?.webContents.send("torrent:status", toStatus(t));
+    }
+  }
+
   remove(infoHash: string): void {
     this.torrents.get(infoHash)?.destroy();
     this.torrents.delete(infoHash);
@@ -98,12 +113,17 @@ export class TorrentEngine {
   }
 
   async shutdown(): Promise<void> {
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
     if (!this.client) return;
     await new Promise<void>((resolve) => this.client!.destroy(() => resolve()));
   }
 
   private pollStatus(): void {
-    setInterval(() => {
+    if (this.pollInterval) return;
+    this.pollInterval = setInterval(() => {
       const now = Date.now();
       if (now - this.lastBroadcast < 1000) return;
       this.lastBroadcast = now;

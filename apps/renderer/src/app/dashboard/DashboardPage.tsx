@@ -106,7 +106,7 @@ export function DashboardPage() {
   }, [historyItems, filter, searchQuery]);
 
   return (
-    <div className="max-w-5xl space-y-7">
+    <div className="w-full max-w-6xl mx-auto space-y-7">
       {/* Header */}
       <div>
         <motion.h1
@@ -207,6 +207,15 @@ export function DashboardPage() {
                 className="bg-surface-raised border border-surface-border rounded-lg pl-8 pr-3 py-1 text-xs text-zinc-100 placeholder:text-zinc-600 focus-ring w-44"
               />
             </div>
+
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setActiveTab("history")}
+              title="Open full dedicated History view"
+            >
+              <History size={13} /> Full History
+            </Button>
 
             {historyItems.length > 0 && (
               <>

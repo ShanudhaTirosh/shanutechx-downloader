@@ -16,7 +16,7 @@ export function DownloadsPage() {
   }, [refresh, subscribe]);
 
   return (
-    <div className="max-w-3xl">
+    <div className="w-full max-w-5xl mx-auto space-y-4">
       <motion.h1
         initial={{ opacity: 0, y: -6 }}
         animate={{ opacity: 1, y: 0 }}
