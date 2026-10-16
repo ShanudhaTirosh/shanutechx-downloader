@@ -230,16 +230,31 @@ function resolveSystemBinary(name: string, defaultPath: string): string {
   }
 
   if (isWin) {
+    const appData = process.env.APPDATA || "";
     const localAppData = process.env.LOCALAPPDATA || "";
     const programFiles = process.env.ProgramFiles || "C:\\Program Files";
     const candidates = [
+      path.join(appData, "STX Downloader", "binaries", binaryFilename),
+      path.join(appData, "SHANUTECHX Downloader", "binaries", binaryFilename),
+      path.join(appData, "Electron", "binaries", binaryFilename),
       path.join(localAppData, "Microsoft", "WinGet", "Links", binaryFilename),
       `C:\\ffmpeg\\bin\\${binaryFilename}`,
       `C:\\Program Files\\ffmpeg\\bin\\${binaryFilename}`,
       path.join(programFiles, "ffmpeg", "bin", binaryFilename),
     ];
     for (const c of candidates) {
-      if (binaryExists(c)) return c;
+      if (binaryExists(c)) {
+        if (c !== defaultPath && !binaryExists(defaultPath)) {
+          try {
+            fs.mkdirSync(path.dirname(defaultPath), { recursive: true });
+            fs.copyFileSync(c, defaultPath);
+            return defaultPath;
+          } catch {
+            return c;
+          }
+        }
+        return c;
+      }
     }
   }
 

@@ -1,293 +1,194 @@
+<div align="center">
+  <img src="STX.png" alt="STX Downloader Logo" width="180" style="border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
 
-# SHANUTECHX Downloader
+  # STX Downloader
+  ### Ultra-Fast, Multi-Protocol Desktop Download Manager & Media Suite
 
-A modern, powerful desktop download manager built with Electron, React, and TypeScript. Download files from HTTP/HTTPS, social media platforms (YouTube, TikTok, Instagram, etc.), torrents, and convert media files - all with an elegant, user-friendly interface.
+  [![Version](https://img.shields.io/badge/version-0.2.0-blue.svg?style=for-the-badge&logo=semver)](https://github.com/ShanudhaTirosh/shanutechx-downloader/releases)
+  [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6.svg?style=for-the-badge&logo=windows)](https://github.com/ShanudhaTirosh/shanutechx-downloader)
+  [![Electron](https://img.shields.io/badge/Electron-33.0.0-47848F.svg?style=for-the-badge&logo=electron)](https://www.electronjs.org/)
+  [![React](https://img.shields.io/badge/React-18.3.1-61DAFB.svg?style=for-the-badge&logo=react)](https://react.dev/)
+  [![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)](LICENSE)
 
-![SHANUTECHX Downloader](docs/screenshots/dashboard.png)
+  <p align="center">
+    <b>Engineered by <a href="https://info.shanutechx.com">Shanudha Tirosh</a> • SHANUTECHX</b><br/>
+    <a href="https://info.shanutechx.com">Portfolio & Website</a> •
+    <a href="https://github.com/ShanudhaTirosh/shanutechx-downloader">GitHub Repository</a> •
+    <a href="https://github.com/ShanudhaTirosh/shanutechx-downloader/issues">Report Issue</a>
+  </p>
+</div>
 
-## ✨ Features
+---
 
-### 🚀 Multi-Protocol Downloads
-- **HTTP/HTTPS Downloads** - Multi-segment parallel downloading for maximum speed
-- **Social Media Support** - Download from YouTube, TikTok, Instagram, Twitter, Facebook, and 1800+ sites via yt-dlp
-- **Adult Content Support** - Download from Pornhub, Xvideos, and other adult platforms (privacy-focused, all local)
-- **Torrent Support** - Built-in WebTorrent engine for P2P downloads
-- **Smart Resume** - Automatic resume on network errors with exponential backoff
+## 📖 Overview
 
-### 🎨 Beautiful UI/UX
-- **Modern Dark Theme** - Elegant glass-morphism design with improved sidebar
-- **Real-Time Progress** - Live speed, ETA, and transfer statistics
-- **Toast Notifications** - Non-intrusive feedback for all actions
-- **Custom Title Bar** - Frameless window with working minimize/maximize/close buttons
-- **Responsive Layout** - Clean, organized interface that scales beautifully
-- **Collapsible Sidebar** - Space-efficient navigation with smooth animations
+**STX Downloader** is a next-generation desktop download manager and media extraction engine engineered for speed, reliability, and visual elegance. Built on **Electron 33**, **React 18**, and **TypeScript**, STX Downloader unifies high-performance multi-threaded direct downloads, 1800+ social media grabbers, streaming BitTorrent downloads, and a full FFmpeg media converter into a single cohesive, dark glassmorphic application.
 
-### ⚡ Advanced Features
-- **Speed Limiting** - Global and per-file bandwidth controls with real token bucket implementation
-- **Concurrent Downloads** - Download multiple files simultaneously
-- **Multi-Segment Downloads** - Split files into segments for faster downloads
-- **Retry Strategy** - Smart retry logic that skips permanent failures (404, 403)
-- **Proxy Support** - HTTP and SOCKS5 proxy with secure credential storage in OS keychain
-- **Media Conversion** - Extract audio, convert formats using bundled FFmpeg
-- **Auto-Updates** - Automatic updates via GitHub releases
+---
 
-### 🔒 Security & Privacy
-- **Context Isolation** - Electron security best practices enforced
-- **Secure Credential Storage** - Proxy passwords stored in OS keychain, never in plaintext
-- **Sandboxed Renderer** - No nodeIntegration, full content security
-- **Certificate Validation** - TLS verification enabled by default (opt-in to disable)
+## ⚡ Core Capabilities
 
-### 🛠️ Zero Configuration
-- **Auto-Download Binaries** - yt-dlp and FFmpeg automatically downloaded on first launch
-- **No Manual Setup** - Everything works out of the box
-- **Windows Support** - Built specifically for Windows platform
+### 1. Multi-Threaded Direct Downloads
+* **Parallel Stream Acceleration**: Download files with up to 32 parallel HTTP range connection threads, dramatically maximizing network bandwidth saturation.
+* **Smart Pause & Resume**: Robust pause/resume with byte-accurate chunk state persistence in a local SQLite database powered by Drizzle ORM.
+* **Batch Downloader Modal**: Queue multiple URLs simultaneously with custom stream allocations and destination directories.
+* **Real Token-Bucket Speed Limiter**: Global and per-item download rate limiting to protect network bandwidth when multitasking.
+* **Auto-Category Classification**: Automatically sorts downloads into Videos, Audio, Documents, Archives, and Software.
 
-## 📦 Installation
+### 2. Social Grabber (1,800+ Platforms)
+* **Powered by yt-dlp**: Seamless video and audio extraction from YouTube, TikTok, Instagram, Twitter/X, Facebook, Twitch, Reddit, Vimeo, and adult platforms.
+* **High-Fidelity Audio Extraction**: Extract pristine audio in MP3 (up to 320k), M4A, FLAC, WAV, AAC, and OPUS.
+* **Automatic Metadata & Cover Art Embedding**: Embeds high-resolution cover thumbnails, artist info, and track titles directly into output files.
+* **Photo Carousel & Slideshow Generator**: Download photo carousels from TikTok and Instagram or automatically render them into smooth MP4 slideshow videos with background audio.
+* **Browser Cookie Pass-Through**: Authenticate against private playlists or member content using Chrome, Edge, Brave, or Firefox session cookies.
 
-### Download Pre-Built Binaries
+### 3. BitTorrent & P2P Client
+* **WebTorrent P2P Engine**: Lightning-fast torrent and magnet link downloads without external software.
+* **File Selective Downloading**: Choose individual files to prioritize or exclude from torrent bundles.
+* **Swarm Health & Telemetry**: Live tracker status, peer counts, upload/download ratios, and seeding management.
+* **Magnet Drag & Drop**: Drop `.torrent` files or paste magnet URIs directly into the client.
 
-Download the latest release for Windows from the [Releases](https://github.com/ShanudhaTirosh/shanutechx-downloader/releases) page:
+### 4. Universal Media Converter
+* **Embedded FFmpeg Engine**: Convert video and audio between popular formats (MP4, MKV, AVI, WebM, MOV, MP3, FLAC, WAV, OGG, AAC) with zero quality loss.
+* **Configurable Transcoding**: Custom video codecs (H.264, H.265, VP9), resolutions (4K, 1080p, 720p, 480p), audio bitrates, and hardware acceleration options.
+* **Batch Conversion**: Transcode entire directories or playlists concurrently with progress tracking.
 
-- **Windows**: `SHANUTECHX-Downloader-Setup-{version}.exe`
+### 5. System Tray & Background Automation
+* **Compact Notification Tray**: Real-time download speed and active transfers badge displayed directly in the Windows taskbar tray.
+* **Background Operation**: Minimize to system tray without interrupting downloads.
+* **Single-Instance Enforcement**: Deep-linking protocol (`shanutechx://`) allows browser extensions and external triggers to enqueue downloads instantly.
 
-### Build from Source
+---
 
-#### Prerequisites
+## 🛠️ Zero-Config System Binaries (Auto-Provisioned)
 
-- Node.js 20+ and pnpm 9+
-- Git
+STX Downloader eliminates the hassle of manually installing or configuring external command-line tools.
 
-#### Clone and Install
+* **Automatic Detection**: On application startup, the binary manager checks for `yt-dlp.exe`, `ffmpeg.exe`, and `ffprobe.exe`.
+* **Zero-Touch Auto-Download**: If missing, STX Downloader automatically downloads the official release binaries in the background with live progress indicators.
+* **Seamless Local Migration**: If you previously had binaries in `%APPDATA%\Electron\binaries` or `%APPDATA%\SHANUTECHX Downloader\binaries`, STX Downloader instantly auto-migrates them to `%APPDATA%\STX Downloader\binaries` without re-downloading.
+* **Runtime Self-Healing**: If a user requests audio extraction or video transcoding and FFmpeg is not yet available, the system initiates an on-demand download immediately.
 
-```bash
-git clone https://github.com/ShanudhaTirosh/shanutechx-downloader.git
-cd shanutechx-downloader
-pnpm install
-```
+---
 
-#### Development
+## 👤 About the Developer & Brand
 
-Run the app in development mode with hot-reload:
+**STX Downloader** is designed, developed, and maintained by **Shanudha Tirosh** under the **SHANUTECHX** software brand.
 
-```bash
-pnpm dev
-```
+* **Developer**: Shanudha Tirosh
+* **Brand / Studio**: SHANUTECHX
+* **Official Website**: [https://info.shanutechx.com](https://info.shanutechx.com)
+* **GitHub**: [@ShanudhaTirosh](https://github.com/ShanudhaTirosh)
+* **Support Email**: [info@shanutechx.com](mailto:info@shanutechx.com)
+* **Issue Tracker**: [GitHub Issues](https://github.com/ShanudhaTirosh/shanutechx-downloader/issues)
 
-This starts both the React renderer (Vite dev server) and Electron main process.
+If you find this project valuable, please consider giving it a ⭐ on [GitHub](https://github.com/ShanudhaTirosh/shanutechx-downloader)!
 
-#### Build
+---
 
-Build the application for production:
-
-```bash
-# Build both main and renderer
-pnpm build
-
-# Package into executable
-pnpm package
-```
-
-The packaged application will be in `apps/main/dist/`.
-
-## 🚀 Usage
-
-### Basic Downloads
-
-1. Go to **Downloads** tab
-2. Paste a URL and click **Start Download**
-3. Watch real-time progress with speed and ETA
-
-### Social Media Downloads
-
-1. Go to **Social Grab** tab
-2. Paste a URL from supported sites:
-   - **Video Platforms**: YouTube, TikTok, Instagram, Vimeo, Dailymotion
-   - **Social Media**: Twitter/X, Facebook, Reddit
-   - **Adult Content**: Pornhub, Xvideos, and 1000+ other sites
-   - **Live Streaming**: Twitch, YouTube Live
-   - And many more (yt-dlp supports 1800+ sites)
-3. Click **Extract** to see available qualities
-4. Select quality and click **Download**
-
-**Note**: Your app respects your privacy - all downloads happen locally on your machine.
-
-### Torrents
-
-1. Go to **Torrents** tab
-2. Paste a magnet link
-3. Click **Add** to start downloading
-4. Monitor peers, speed, and progress
-
-### Media Conversion
-
-1. Go to **Converter** tab
-2. Click **Browse** to select a video/audio file
-3. Click **Extract Audio** to convert to MP3
-4. Track progress on the Dashboard
-
-## ⚙️ Settings
-
-### Downloads
-- **Max Simultaneous Downloads** - Control how many files download at once (1-20)
-- **Segments per Download** - Split files into segments for parallel downloading (1-32)
-
-### Speed Limits
-- **Global Speed Limit** - Maximum total speed across all downloads (KB/s, 0 = unlimited)
-- **Per-File Speed Limit** - Maximum speed for each individual file (KB/s, 0 = unlimited)
-
-### Proxy
-- **Type** - None, HTTP, or SOCKS5
-- **Host & Port** - Proxy server address
-- **Credentials** - Optional username/password (stored securely in OS keychain)
-
-### System Binaries
-- **Auto-Download** - Missing binaries (yt-dlp, ffmpeg, ffprobe) are automatically downloaded
-- **Manual Download** - Click "Download Missing Binaries" if needed
-
-### App Updates
-- **Check for Updates** - Manually check for new versions
-- **Auto-Update** - Updates downloaded from GitHub releases
-- **One-Click Install** - Download and restart to update
-
-## 🏗️ Architecture
-
-### Technology Stack
-
-- **Electron** - Cross-platform desktop framework
-- **React 18** - UI library with hooks
-- **TypeScript** - Type-safe development
-- **Vite** - Lightning-fast dev server and bundler
-- **Framer Motion** - Smooth animations
-- **SQLite** (better-sqlite3) - Local database for download history
-- **Drizzle ORM** - Type-safe database queries
-- **Undici** - HTTP client for downloads
-- **WebTorrent** - P2P torrent client
-- **yt-dlp** - Social media extractor (auto-downloaded)
-- **FFmpeg** - Media conversion (auto-downloaded)
-
-### Project Structure
+## 🏗️ Architecture & Technology Stack
 
 ```
 shanutechx-downloader/
-├── .github/workflows/    # GitHub Actions CI/CD
 ├── apps/
-│   ├── main/            # Electron main process
-│   └── renderer/        # React frontend
-├── packages/
-│   └── shared-types/    # Shared TypeScript types
-├── docs/                # Documentation
-│   ├── SETUP.md
-│   ├── CHANGELOG.md
-│   └── IMPROVEMENTS.md
-└── package.json         # Root workspace config
+│   ├── main/                  # Electron Main Process (Node.js + TypeScript)
+│   │   ├── src/
+│   │   │   ├── engines/       # Direct, Social (yt-dlp), Torrent, Converter
+│   │   │   ├── ipc/           # Type-safe IPC channels & handlers
+│   │   │   ├── queue/         # Parallel download queue & token bucket limiter
+│   │   │   ├── db/            # SQLite with Drizzle ORM
+│   │   │   ├── tray/          # Windows system tray integration
+│   │   │   └── utils/         # Auto binary manager (yt-dlp, ffmpeg)
+│   │   └── electron-builder.yml
+│   └── renderer/              # Modern React 18 + Vite UI
+│       └── src/
+│           ├── app/           # Dashboard, Downloads, Social, Torrents, Converter, History
+│           ├── components/    # Reusable UI widgets, cards, dialogs, title bar
+│           └── stores/        # Zustand state management
+└── packages/
+    ├── design-tokens/         # Shared Tailwind CSS presets & styling tokens
+    └── shared-types/          # Shared TypeScript contracts & interfaces
 ```
 
-### Key Design Decisions
-
-1. **Type-Safe IPC** - All main↔renderer communication typed in `shared-types` package
-2. **Single Source of Truth** - QueueManager broadcasts all download state; renderer never guesses
-3. **Real Settings** - Every setting has a tested code path that actually uses it
-4. **Security First** - No nodeIntegration, context isolation, sandboxed renderer
-5. **Automatic Binaries** - No manual configuration; yt-dlp and FFmpeg downloaded automatically
-6. **Smart Retry** - Exponential backoff with permanent failure detection (404, 403, etc.)
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these guidelines:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Development Guidelines
-
-- Follow the existing code style (TypeScript, ESLint)
-- Write descriptive commit messages
-- Test your changes in dev mode before submitting
-- Update documentation for new features
-- Keep the IPC contract in sync (update `shared-types`)
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - Powerful media extractor
-- [FFmpeg](https://ffmpeg.org/) - Multimedia framework
-- [WebTorrent](https://webtorrent.io/) - Streaming torrent client
-- [Electron](https://www.electronjs.org/) - Cross-platform desktop apps
-- [React](https://react.dev/) - UI library
-- [Vite](https://vitejs.dev/) - Build tool
-- [Framer Motion](https://www.framer.com/motion/) - Animation library
-
-## 📞 Support
-
-- **Website**: [info.shanutechx.com](https://info.shanutechx.com)
-- **Email**: [info@shanutechx.com](mailto:info@shanutechx.com)
-- **Issues**: [GitHub Issues](https://github.com/ShanudhaTirosh/shanutechx-downloader/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/ShanudhaTirosh/shanutechx-downloader/discussions)
-
-## 🗺️ Roadmap
-
-- [ ] Drag & drop support for torrents and files
-- [ ] Download scheduler
-- [ ] Browser extension for easy downloads
-- [ ] Cloud sync for download history
-- [ ] Light theme
-- [ ] More conversion presets (H.264, H.265, AV1)
-- [ ] Playlist/batch downloads from social media
-- [ ] Chrome extension integration
-- [ ] Multi-language support
+| Layer | Technologies |
+|---|---|
+| **Runtime** | Electron 33, Node.js 20+ |
+| **Frontend Framework** | React 18, TypeScript, Vite |
+| **Styling & Effects** | Tailwind CSS, Framer Motion, Lucide Icons |
+| **Persistence** | SQLite3 via `better-sqlite3`, Drizzle ORM |
+| **Download Engines** | Custom Multi-Stream Chunk Engine, `yt-dlp`, `WebTorrent`, `FFmpeg` |
+| **Networking** | Undici HTTP/1.1 & HTTP/2 client |
 
 ---
 
-**Built with ❤️ by [Shanudha Tirosh](https://info.shanutechx.com)**
+## 🚀 Getting Started
 
-## 🔧 Troubleshooting
+### Installation (Pre-Built Executables)
+1. Download the latest installer `STX-Downloader-Setup-{version}.exe` from [Releases](https://github.com/ShanudhaTirosh/shanutechx-downloader/releases).
+2. Run the installer. Desktop and Start Menu shortcuts will be generated automatically.
+3. Launch STX Downloader. All core binaries will be auto-configured.
 
-### Black Screen on Launch
+### Building From Source
 
-If you see a black screen:
+#### Prerequisites
+- **Node.js** >= 20.0.0
+- **pnpm** >= 9.0.0
+- **Git**
 
-1. Stop the development server
-2. Run `pnpm dev` again
-3. Check the console for errors
+```bash
+# 1. Clone the repository
+git clone https://github.com/ShanudhaTirosh/shanutechx-downloader.git
+cd shanutechx-downloader
 
-The most common cause is Vite module resolution errors. The fix is to restart the dev server.
+# 2. Install workspace dependencies
+pnpm install
 
-### Binaries Not Downloading
+# 3. Launch development mode with hot-reload
+pnpm dev
 
-If yt-dlp or FFmpeg fail to download:
+# 4. Build and package the production installer
+pnpm build
+pnpm package
+```
 
-1. Check your internet connection
-2. Try manual download from Settings → System Binaries
-3. Check the console logs for specific errors
-
-Binaries are downloaded to your app's userData directory:
-- Windows: `%APPDATA%\SHANUTECHX Downloader\binaries`
-
-### Updates Not Working
-
-If auto-updates aren't working:
-
-1. Make sure you built from a tagged release commit
-2. Check the electron-builder.yml has the correct GitHub username
-3. Verify GitHub releases are public
-4. Check Settings → App Updates for error messages
+The resulting NSIS executable will be located in `apps/main/dist/`.
 
 ---
 
-## 📚 Documentation
+## 🗺️ Roadmap & Feature Expansions
 
-- **[Setup Guide](docs/SETUP.md)** - Detailed setup and configuration instructions
-- **[Changelog](docs/CHANGELOG.md)** - Version history and release notes
-- **[Improvements](docs/IMPROVEMENTS.md)** - Technical improvements and bug fixes
-- **[Supported Sites](docs/SUPPORTED-SITES.md)** - Complete list of 1800+ supported platforms
-- **[Adult Content Support](docs/ADULT-CONTENT-SUPPORT.md)** - Privacy-focused downloading guide
+### Phase 1: Core Engine & Polish (Completed)
+- [x] Multi-stream parallel direct download engine with 1-32 thread controls.
+- [x] Social Grabber with 1800+ sites, video/audio quality presets, and thumbnail embedding.
+- [x] WebTorrent client with DHT, magnet resolution, and file selective downloading.
+- [x] Universal FFmpeg converter with video/audio transcoding.
+- [x] Windows system tray with live transfer speed counter.
+- [x] Automatic binary provisioning and legacy migration for yt-dlp & FFmpeg.
+- [x] Clean STX Downloader branding and brand iconography.
+- [x] High-contrast obsidian glassmorphic filter bars and navigation.
+
+### Phase 2: Automation & Power Tools (In Progress)
+- [x] Batch download modal with multi-URL parsing.
+- [x] JSON import/export for download history backup.
+- [ ] Automated download schedule calendar (e.g., night-time off-peak downloading).
+- [ ] Bandwidth scheduling (custom speed caps at specific hours of the day).
+- [ ] Full playlist and channel scraping with selectable item checkboxes.
+
+### Phase 3: Ecosystem & Cloud Expansions (Upcoming)
+- [ ] Chrome & Firefox companion extension with single-click download takeover.
+- [ ] Webhook notifications (Discord, Telegram) on download completion.
+- [ ] Encrypted cloud synchronization for download settings and history.
+- [ ] Remote web control interface for headless or home server deployments.
 
 ---
 
-**Star ⭐ this repo if you find it useful!**
+## 📄 License
+
+This software is released under the **MIT License**. See the [LICENSE](LICENSE) file for more information.
+
+---
+
+<div align="center">
+  <b>STX Downloader • Crafted with precision by <a href="https://info.shanutechx.com">Shanudha Tirosh</a></b><br/>
+  © 2026 SHANUTECHX. All Rights Reserved.
+</div>

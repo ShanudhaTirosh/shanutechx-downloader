@@ -7,7 +7,7 @@ import log from "electron-log";
 // creating a nested, wrong userData directory (~/.config/@shanutechx/main/
 // instead of a clean ~/.config/shanutechx-downloader/). Caught by actually
 // booting a real packaged build and inspecting where the DB landed.
-app.setName("SHANUTECHX Downloader");
+app.setName("STX Downloader");
 
 import { createMainWindow } from "./window";
 import { enforceSingleInstance } from "./single-instance";
@@ -26,7 +26,7 @@ import { TrayManager } from "./tray/tray-manager";
 import { registerCompleteNotifier } from "./utils/download-complete-actions";
 
 log.initialize();
-log.info("SHANUTECHX Downloader starting…");
+log.info("STX Downloader starting…");
 
 let mainWindow: BrowserWindow | null = null;
 let queueManager: QueueManager | null = null;
@@ -67,6 +67,7 @@ if (isPrimaryInstance) {
   app.setAsDefaultProtocolClient("shanutechx");
 
   app.whenReady().then(async () => {
+    app.setAppUserModelId("com.shanutechx.stxdownloader");
     Menu.setApplicationMenu(null); // custom title bar owns the app chrome
 
     getDb(); // opens the single long-lived connection, runs schema setup

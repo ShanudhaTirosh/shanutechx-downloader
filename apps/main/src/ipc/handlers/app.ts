@@ -92,7 +92,7 @@ export async function checkGitHubRelease(): Promise<{
     if (isNewer) {
       cachedUpdate = {
         version: cleanLatest,
-        releaseNotes: data.body || "A new version of SHANUTECHX Downloader is ready for update.",
+        releaseNotes: data.body || "A new version of STX Downloader is ready for update.",
         downloadUrl,
         publishedAt: data.published_at,
         isDirectExe,

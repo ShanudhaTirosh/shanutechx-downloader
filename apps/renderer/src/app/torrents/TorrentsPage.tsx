@@ -14,6 +14,7 @@ import {
   ArrowDown,
   ArrowUp,
   Zap,
+  Layers,
 } from "lucide-react";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
@@ -364,36 +365,41 @@ export function TorrentsPage() {
 
       {/* Status Filter Pills */}
       {list.length > 0 && (
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-[#12121e] border border-white/15 shadow-lg shadow-black/50 w-fit">
           {(
             [
-              { id: "all", label: "All", count: list.length },
-              { id: "downloading", label: "Downloading", count: downloadingList.length },
-              { id: "seeding", label: "Seeding", count: seedingList.length },
-              { id: "paused", label: "Paused", count: pausedList.length },
+              { id: "all", label: "All", count: list.length, icon: Layers, gradient: "bg-gradient-to-r from-violet-600 to-indigo-600 shadow-[0_0_14px_rgba(124,58,237,0.45)]" },
+              { id: "downloading", label: "Downloading", count: downloadingList.length, icon: DownloadCloud, gradient: "bg-gradient-to-r from-cyan-600 to-blue-600 shadow-[0_0_14px_rgba(6,182,212,0.45)]" },
+              { id: "seeding", label: "Seeding", count: seedingList.length, icon: ArrowUp, gradient: "bg-gradient-to-r from-emerald-600 to-teal-600 shadow-[0_0_14px_rgba(16,185,129,0.45)]" },
+              { id: "paused", label: "Paused", count: pausedList.length, icon: Pause, gradient: "bg-gradient-to-r from-amber-600 to-orange-600 shadow-[0_0_14px_rgba(245,158,11,0.45)]" },
             ] as const
-          ).map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setTorrentFilter(tab.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
-                torrentFilter === tab.id
-                  ? "bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 shadow-[0_0_12px_rgba(6,182,212,0.15)]"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-surface-raised border border-transparent"
-              }`}
-            >
-              <span>{tab.label}</span>
-              <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                  torrentFilter === tab.id
-                    ? "bg-cyan-500/25 text-cyan-200"
-                    : "bg-surface-raised-hover text-zinc-500"
+          ).map((tab) => {
+            const Icon = tab.icon;
+            const isSelected = torrentFilter === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setTorrentFilter(tab.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  isSelected
+                    ? `${tab.gradient} text-white`
+                    : "text-zinc-300 hover:text-white hover:bg-white/[0.08]"
                 }`}
               >
-                {tab.count}
-              </span>
-            </button>
-          ))}
+                <Icon size={13} className={isSelected ? "text-white" : "text-zinc-400"} />
+                <span>{tab.label}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono transition-colors ${
+                    isSelected
+                      ? "bg-black/30 text-white border border-white/25 font-bold shadow-inner"
+                      : "bg-white/[0.08] text-zinc-300 border border-white/10"
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
 

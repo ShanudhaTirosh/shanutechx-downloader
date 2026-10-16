@@ -11,6 +11,7 @@ export function createMainWindow(): BrowserWindow {
     : path.join(process.resourcesPath, "icon.ico");
   
   const win = new BrowserWindow({
+    title: "STX Downloader",
     width: 1280,
     height: 820,
     minWidth: 960,

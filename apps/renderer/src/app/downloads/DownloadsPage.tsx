@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  AlertCircle,
-  ArrowRight,
   Play,
   Pause,
   XCircle,
@@ -14,10 +12,16 @@ import {
   Archive,
   Terminal,
   Filter,
+  Clapperboard,
+  Download,
+  Layers,
+  Clock,
+  CheckCircle2,
 } from "lucide-react";
 import { AddUrlBar } from "../../components/widgets/AddUrlBar";
 import { DownloadCard } from "../../components/widgets/DownloadCard";
 import { useDownloadsStore } from "../../stores/downloadsStore";
+import { useUiStore } from "../../stores/uiStore";
 import { Button } from "../../components/ui/Button";
 import { formatBytes, formatSpeed } from "../../lib/format";
 import { springs, staggerContainer } from "../../lib/motion";
@@ -38,6 +42,7 @@ function getFileCategory(filename: string): CategoryFilter {
 
 export function DownloadsPage() {
   const { items, refresh, subscribe, pauseAll, resumeAll, cancelAll } = useDownloadsStore();
+  const setActiveTab = useUiStore((s) => s.setActiveTab);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
 
@@ -87,15 +92,24 @@ export function DownloadsPage() {
             transition={springs.gentle}
             className="text-xl font-semibold text-zinc-100 mb-1 flex items-center gap-2"
           >
-            Direct Downloads
+            <Download size={20} className="text-brand-primary shrink-0" />
+            <span>Direct Downloads</span>
             {totalSpeedBps > 0 && (
-              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 font-mono animate-pulse">
-                <Zap size={12} /> {formatSpeed(totalSpeedBps)}
+              <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 font-mono animate-pulse">
+                <Zap size={12} className="fill-current" /> {formatSpeed(totalSpeedBps)}
               </span>
             )}
           </motion.h1>
-          <p className="text-sm text-zinc-500">
-            Multi-threaded high speed download manager with dynamic chunk splitting & retry resilience.
+          <p className="text-sm text-zinc-400 flex items-center gap-2 flex-wrap">
+            <span>Multi-threaded parallel downloader with stream acceleration.</span>
+            <button
+              type="button"
+              onClick={() => setActiveTab("social")}
+              className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 transition-colors underline decoration-cyan-400/30 underline-offset-2"
+            >
+              <Clapperboard size={12} />
+              <span>Looking for YouTube or video sites? Switch to Social Grab &rarr;</span>
+            </button>
           </p>
         </div>
 
@@ -139,56 +153,65 @@ export function DownloadsPage() {
         )}
       </div>
 
-      {/* Social Grab Notice */}
-      <div className="flex items-center gap-1.5 text-xs text-zinc-400 bg-surface-raised/40 px-3 py-2 rounded-lg border border-white/5">
-        <AlertCircle size={14} className="text-amber-400 shrink-0" />
-        <span>For YouTube, TikTok, Instagram, Twitter, or video sites</span>
-        <ArrowRight size={12} className="text-zinc-500" />
-        <span>Use the <strong className="text-brand-secondary font-medium">Social Grab</strong> tab</span>
-      </div>
-
       {/* Direct Download Input Bar with Thread Selection & Batch Modal */}
       <AddUrlBar />
 
       {/* Filtering Toolbar */}
       {allHttpItems.length > 0 && (
         <div className="space-y-3 pt-1">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {/* Status Pills */}
-            <div className="flex gap-1.5 p-1 rounded-xl bg-surface-raised/40 border border-border-subtle">
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-[#12121e] border border-white/15 shadow-lg shadow-black/50">
               {(
                 [
-                  { id: "all", label: "All", count: allHttpItems.length },
-                  { id: "active", label: "Active", count: activeItems.length },
-                  { id: "paused", label: "Paused", count: pausedItems.length },
-                  { id: "queued", label: "Queued", count: queuedItems.length },
-                  { id: "complete", label: "Completed", count: completedItems.length },
+                  { id: "all", label: "All", count: allHttpItems.length, icon: Layers, gradient: "bg-gradient-to-r from-violet-600 to-indigo-600 shadow-[0_0_14px_rgba(124,58,237,0.45)]" },
+                  { id: "active", label: "Active", count: activeItems.length, icon: Zap, gradient: "bg-gradient-to-r from-cyan-600 to-blue-600 shadow-[0_0_14px_rgba(6,182,212,0.45)]" },
+                  { id: "paused", label: "Paused", count: pausedItems.length, icon: Pause, gradient: "bg-gradient-to-r from-amber-600 to-orange-600 shadow-[0_0_14px_rgba(245,158,11,0.45)]" },
+                  { id: "queued", label: "Queued", count: queuedItems.length, icon: Clock, gradient: "bg-gradient-to-r from-purple-600 to-pink-600 shadow-[0_0_14px_rgba(168,85,247,0.45)]" },
+                  { id: "complete", label: "Completed", count: completedItems.length, icon: CheckCircle2, gradient: "bg-gradient-to-r from-emerald-600 to-teal-600 shadow-[0_0_14px_rgba(16,185,129,0.45)]" },
                 ] as const
-              ).map((f) => (
-                <button
-                  key={f.id}
-                  onClick={() => setStatusFilter(f.id)}
-                  className={`relative text-xs px-3 py-1.5 rounded-lg transition-colors focus-ring ${
-                    statusFilter === f.id ? "text-white font-medium" : "text-zinc-400 hover:text-zinc-200"
-                  }`}
-                >
-                  {statusFilter === f.id && (
-                    <motion.span
-                      layoutId="downloads-status-pill"
-                      transition={springs.gentle}
-                      className="absolute inset-0 bg-brand-gradient rounded-lg -z-10"
-                    />
-                  )}
-                  {f.label} ({f.count})
-                </button>
-              ))}
+              ).map((f) => {
+                const Icon = f.icon;
+                const isSelected = statusFilter === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => setStatusFilter(f.id)}
+                    className={`relative text-xs px-3 py-1.5 rounded-lg transition-all focus-ring flex items-center gap-1.5 ${
+                      isSelected ? "text-white font-semibold" : "text-zinc-300 hover:text-white hover:bg-white/[0.08]"
+                    }`}
+                  >
+                    {isSelected && (
+                      <motion.span
+                        layoutId="downloads-status-pill"
+                        transition={springs.gentle}
+                        className={`absolute inset-0 rounded-lg -z-10 ${f.gradient}`}
+                      />
+                    )}
+                    <Icon size={13} className={isSelected ? "text-white" : "text-zinc-400"} />
+                    <span>{f.label}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono transition-colors ${
+                        isSelected
+                          ? "bg-black/30 text-white border border-white/25 font-bold shadow-inner"
+                          : "bg-white/[0.08] text-zinc-300 border border-white/10"
+                      }`}
+                    >
+                      {f.count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
+            {/* Subtle separator */}
+            <div className="hidden sm:block h-5 w-px bg-white/15" />
+
             {/* Category Pills */}
-            <div className="flex items-center gap-1 text-xs">
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-[#12121e] border border-white/15 shadow-lg shadow-black/50 text-xs overflow-x-auto scrollbar-none">
               {(
                 [
-                  { id: "all" as const, label: "All Types", icon: null },
+                  { id: "all" as const, label: "All Types", icon: Layers },
                   { id: "video" as const, label: "Videos", icon: Video },
                   { id: "audio" as const, label: "Audio", icon: Music },
                   { id: "archive" as const, label: "Archives", icon: Archive },
@@ -202,13 +225,13 @@ export function DownloadsPage() {
                   <button
                     key={cat.id}
                     onClick={() => setCategoryFilter(cat.id)}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border transition-colors ${
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all ${
                       isSelected
-                        ? "bg-white/10 text-white border-white/20 font-medium"
-                        : "bg-surface-raised/30 text-zinc-500 border-transparent hover:text-zinc-300"
+                        ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-semibold shadow-[0_0_12px_rgba(6,182,212,0.4)]"
+                        : "text-zinc-300 hover:text-white hover:bg-white/[0.08]"
                     }`}
                   >
-                    {Icon && <Icon size={12} />}
+                    <Icon size={12} className={isSelected ? "text-white" : "text-zinc-400"} />
                     <span>{cat.label}</span>
                   </button>
                 );

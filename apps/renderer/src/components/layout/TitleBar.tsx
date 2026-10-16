@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { ipc } from "../../lib/ipc-client";
 import { springs } from "../../lib/motion";
+import logoImg from "../../assets/logo.png";
 
 /**
  * Custom title bar for the frameless BrowserWindow (see apps/main/src/window.ts).
@@ -53,9 +54,13 @@ export function TitleBar() {
       className="h-10 flex items-center justify-between pl-4 pr-0 select-none border-b border-surface-border bg-[#0a0a0f] relative z-50"
       style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
     >
-      <div className="flex items-center gap-2">
-        <div className="h-4 w-4 rounded bg-brand-gradient shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
-        <span className="text-xs font-semibold tracking-wide text-zinc-300">SHANUTECHX Downloader</span>
+      <div className="flex items-center gap-2.5">
+        <img
+          src={logoImg}
+          alt="STX Downloader"
+          className="h-5 w-5 rounded-md object-contain drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]"
+        />
+        <span className="text-xs font-semibold tracking-wide text-zinc-200">STX Downloader</span>
       </div>
 
       {/* Window Controls (Minimize, Maximize / Restore, Close) */}

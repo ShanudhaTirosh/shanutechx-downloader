@@ -43,7 +43,7 @@ export class TrayManager {
     }
 
     this.tray = new Tray(this.iconImage);
-    this.tray.setToolTip("SHANUTECHX Downloader\nIdle — No active transfers");
+    this.tray.setToolTip("STX Downloader\nIdle • No active transfers");
 
     // Click on tray toggles the main window
     this.tray.on("click", () => this.toggleWindow());
@@ -70,8 +70,8 @@ export class TrayManager {
     this.lastSpeed = speedBps;
 
     const tooltip = activeCount > 0
-      ? `SHANUTECHX Downloader\n${activeCount} active download${activeCount === 1 ? "" : "s"} · ${formatSpeed(speedBps)}`
-      : "SHANUTECHX Downloader\nIdle — No active transfers";
+      ? `STX Downloader\n${activeCount} active download${activeCount === 1 ? "" : "s"} • ${formatSpeed(speedBps)}`
+      : "STX Downloader\nIdle • No active transfers";
 
     this.tray.setToolTip(tooltip);
     this.rebuildContextMenu(activeCount, speedBps);
@@ -83,8 +83,8 @@ export class TrayManager {
     const queue = this.getQueueManager();
 
     const statusLabel = activeCount > 0
-      ? `⚡ ${activeCount} Active (${formatSpeed(speedBps)})`
-      : "✔ Idle (No active downloads)";
+      ? `${activeCount} Active • ${formatSpeed(speedBps)}`
+      : "Idle • No active downloads";
 
     const contextMenu = Menu.buildFromTemplate([
       {
@@ -93,7 +93,7 @@ export class TrayManager {
       },
       { type: "separator" },
       {
-        label: "Open SHANUTECHX Downloader",
+        label: "Open STX Downloader",
         click: () => {
           if (win) {
             if (win.isMinimized()) win.restore();
@@ -151,7 +151,7 @@ export class TrayManager {
       },
       { type: "separator" },
       {
-        label: "Quit SHANUTECHX Downloader",
+        label: "Quit STX Downloader",
         click: () => {
           (app as unknown as { isQuitting?: boolean }).isQuitting = true;
           app.quit();

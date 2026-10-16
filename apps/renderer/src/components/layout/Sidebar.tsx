@@ -4,6 +4,7 @@ import { LayoutDashboard, Download, Clapperboard, Magnet, AudioLines, History as
 import clsx from "clsx";
 import { useUiStore, type TabId } from "../../stores/uiStore";
 import { springs } from "../../lib/motion";
+import logoImg from "../../assets/logo.png";
 
 const NAV_ITEMS: { id: TabId; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -30,7 +31,35 @@ export function Sidebar() {
       transition={springs.gentle}
       className="flex flex-col h-full border-r border-surface-border bg-surface-base/80 backdrop-blur-md shrink-0 select-none z-20"
     >
-      <nav className="flex-1 flex flex-col gap-1.5 p-3 mt-3">
+      {/* Brand Header */}
+      <div
+        className={clsx(
+          "flex items-center gap-3 px-3.5 py-3.5 border-b border-surface-border/40 overflow-hidden",
+          !expanded && "justify-center px-0"
+        )}
+      >
+        <img
+          src={logoImg}
+          alt="STX Downloader"
+          className="h-8 w-8 rounded-lg object-contain drop-shadow-[0_0_12px_rgba(6,182,212,0.5)] shrink-0"
+        />
+        {expanded && (
+          <motion.div
+            initial={{ opacity: 0, x: -6 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.15 }}
+            className="flex flex-col min-w-0"
+          >
+            <span className="text-sm font-bold tracking-tight text-white truncate flex items-center gap-1">
+              <span>STX</span>
+              <span className="text-cyan-400 font-medium">Downloader</span>
+            </span>
+            <span className="text-[10px] text-zinc-500 font-mono tracking-wider uppercase">Pro Edition</span>
+          </motion.div>
+        )}
+      </div>
+
+      <nav className="flex-1 flex flex-col gap-1.5 p-3 mt-1">
         {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
           const active = activeTab === id;
           return (

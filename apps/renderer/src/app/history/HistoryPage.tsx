@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCircle2, XCircle, XSquare, Trash2, History, Trash, FolderOpen, HardDrive, Play } from "lucide-react";
+import { CheckCircle2, XCircle, XSquare, Trash2, History, Trash, FolderOpen, HardDrive, Play, Download, Clapperboard, Magnet, Layers } from "lucide-react";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { useToast } from "../../components/ui/Toast";
@@ -96,7 +96,7 @@ export function HistoryPage() {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
-                a.download = `shanutechx-history-${new Date().toISOString().slice(0, 10)}.json`;
+                a.download = `stx-history-${new Date().toISOString().slice(0, 10)}.json`;
                 a.click();
                 URL.revokeObjectURL(a.href);
                 showToast(`Exported ${res.count} history records to JSON`, "success");
@@ -188,54 +188,95 @@ export function HistoryPage() {
       )}
 
       {/* Filter controls: Status and Source */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="flex gap-1.5 p-1 rounded-xl bg-surface-raised/40 border border-border-subtle">
-          {(["all", "complete", "failed", "cancelled"] as Filter[]).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`relative text-xs px-3 py-1.5 rounded-lg capitalize transition-colors focus-ring ${
-                filter === f ? "text-white" : "text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              {filter === f && (
-                <motion.span
-                  layoutId="history-status-pill"
-                  transition={springs.gentle}
-                  className="absolute inset-0 bg-brand-gradient rounded-lg -z-10"
-                />
-              )}
-              {f} ({f === "all" ? items.length : items.filter(i => i.status === f).length})
-            </button>
-          ))}
-        </div>
-
-        <div className="flex gap-1.5 p-1 rounded-xl bg-surface-raised/40 border border-border-subtle">
+      <div className="flex flex-wrap items-center gap-3 mb-5">
+        {/* Status Pills */}
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-[#12121e] border border-white/15 shadow-lg shadow-black/50">
           {(
             [
-              { id: "all", label: "All Sources" },
-              { id: "http", label: "Direct" },
-              { id: "social", label: "Social Grab" },
-              { id: "torrent", label: "Torrents" },
+              { id: "all", label: "All", icon: Layers, gradient: "bg-gradient-to-r from-violet-600 to-indigo-600 shadow-[0_0_14px_rgba(124,58,237,0.45)]", count: items.length },
+              { id: "complete", label: "Complete", icon: CheckCircle2, gradient: "bg-gradient-to-r from-emerald-600 to-teal-600 shadow-[0_0_14px_rgba(16,185,129,0.45)]", count: items.filter((i) => i.status === "complete").length },
+              { id: "failed", label: "Failed", icon: XCircle, gradient: "bg-gradient-to-r from-rose-600 to-red-600 shadow-[0_0_14px_rgba(244,63,94,0.45)]", count: items.filter((i) => i.status === "failed").length },
+              { id: "cancelled", label: "Cancelled", icon: XSquare, gradient: "bg-gradient-to-r from-amber-600 to-orange-600 shadow-[0_0_14px_rgba(245,158,11,0.45)]", count: items.filter((i) => i.status === "cancelled").length },
             ] as const
-          ).map((sf) => (
-            <button
-              key={sf.id}
-              onClick={() => setSourceFilter(sf.id)}
-              className={`relative text-xs px-3 py-1.5 rounded-lg transition-colors focus-ring ${
-                sourceFilter === sf.id ? "text-white font-medium" : "text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              {sourceFilter === sf.id && (
-                <motion.span
-                  layoutId="history-source-pill"
-                  transition={springs.gentle}
-                  className="absolute inset-0 bg-white/10 rounded-lg -z-10 border border-white/15"
-                />
-              )}
-              {sf.label} ({sf.id === "all" ? items.length : items.filter(i => (i.sourceType || "http") === sf.id).length})
-            </button>
-          ))}
+          ).map((f) => {
+            const Icon = f.icon;
+            const isSelected = filter === f.id;
+            return (
+              <button
+                key={f.id}
+                onClick={() => setFilter(f.id)}
+                className={`relative text-xs px-3 py-1.5 rounded-lg transition-all focus-ring flex items-center gap-1.5 ${
+                  isSelected ? "text-white font-semibold" : "text-zinc-300 hover:text-white hover:bg-white/[0.08]"
+                }`}
+              >
+                {isSelected && (
+                  <motion.span
+                    layoutId="history-status-pill"
+                    transition={springs.gentle}
+                    className={`absolute inset-0 rounded-lg -z-10 ${f.gradient}`}
+                  />
+                )}
+                <Icon size={13} className={isSelected ? "text-white" : "text-zinc-400"} />
+                <span>{f.label}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono transition-colors ${
+                    isSelected
+                      ? "bg-black/30 text-white border border-white/25 font-bold shadow-inner"
+                      : "bg-white/[0.08] text-zinc-300 border border-white/10"
+                  }`}
+                >
+                  {f.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Subtle separator */}
+        <div className="hidden sm:block h-5 w-px bg-white/15" />
+
+        {/* Source Pills */}
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-[#12121e] border border-white/15 shadow-lg shadow-black/50">
+          {(
+            [
+              { id: "all", label: "All Sources", icon: Layers, gradient: "bg-gradient-to-r from-cyan-600 to-blue-600 shadow-[0_0_14px_rgba(6,182,212,0.45)]" },
+              { id: "http", label: "Direct", icon: Download, gradient: "bg-gradient-to-r from-sky-600 to-indigo-600 shadow-[0_0_14px_rgba(14,165,233,0.45)]" },
+              { id: "social", label: "Social Grab", icon: Clapperboard, gradient: "bg-gradient-to-r from-fuchsia-600 to-pink-600 shadow-[0_0_14px_rgba(217,70,239,0.45)]" },
+              { id: "torrent", label: "Torrents", icon: Magnet, gradient: "bg-gradient-to-r from-teal-600 to-emerald-600 shadow-[0_0_14px_rgba(20,184,166,0.45)]" },
+            ] as const
+          ).map((sf) => {
+            const Icon = sf.icon;
+            const isSelected = sourceFilter === sf.id;
+            const count = sf.id === "all" ? items.length : items.filter((i) => (i.sourceType || "http") === sf.id).length;
+            return (
+              <button
+                key={sf.id}
+                onClick={() => setSourceFilter(sf.id)}
+                className={`relative text-xs px-3 py-1.5 rounded-lg transition-all focus-ring flex items-center gap-1.5 ${
+                  isSelected ? "text-white font-semibold" : "text-zinc-300 hover:text-white hover:bg-white/[0.08]"
+                }`}
+              >
+                {isSelected && (
+                  <motion.span
+                    layoutId="history-source-pill"
+                    transition={springs.gentle}
+                    className={`absolute inset-0 rounded-lg -z-10 ${sf.gradient}`}
+                  />
+                )}
+                <Icon size={13} className={isSelected ? "text-white" : "text-zinc-400"} />
+                <span>{sf.label}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono transition-colors ${
+                    isSelected
+                      ? "bg-black/30 text-white border border-white/25 font-bold shadow-inner"
+                      : "bg-white/[0.08] text-zinc-300 border border-white/10"
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 

@@ -9,7 +9,7 @@ import type { BrowserWindow } from "electron";
 import { extractMediaInfo } from "./extract-info";
 import { SocialDownloadJob } from "./social-download-job";
 import { resolveBinaries } from "./binaries";
-import { ensureYtDlpBinary, getBinaryPaths } from "../../utils/binary-manager";
+import { ensureYtDlpBinary, ensureFfmpegBinary, getBinaryPaths } from "../../utils/binary-manager";
 import { runProcess } from "../../utils/spawn-process";
 import { downloadsRepo } from "../../db/downloads-repo";
 import { settingsStore } from "../../settings/settings-store";
@@ -94,7 +94,16 @@ export class SocialManager {
     const audioBitrate = (format as any).bitrate || "320k";
 
     const paths = getBinaryPaths();
-    const ffmpegPath = paths.ffmpeg;
+    let ffmpegPath = paths.ffmpeg;
+    if (!fs.existsSync(ffmpegPath) && (isAudioExtract || settings.autoEmbedThumbnail)) {
+      try {
+        ffmpegPath = await ensureFfmpegBinary((progress) => {
+          this.getWindow()?.webContents.send("binary:download-progress", progress);
+        });
+      } catch (err) {
+        console.warn("Could not auto-download FFmpeg for post-processing:", err);
+      }
+    }
 
     const job = new SocialDownloadJob(
       id, url, effectiveSaveDir, format.ytdlpFormat, ytDlp, settings.ignoreCertificateErrors,
@@ -250,7 +259,16 @@ export class SocialManager {
 
         // 4. Run FFmpeg
         const paths = getBinaryPaths();
-        const ffmpegPath = paths.ffmpeg;
+        let ffmpegPath = paths.ffmpeg;
+        if (!fs.existsSync(ffmpegPath)) {
+          try {
+            ffmpegPath = await ensureFfmpegBinary((progress) => {
+              this.getWindow()?.webContents.send("binary:download-progress", progress);
+            });
+          } catch (err) {
+            console.warn("Could not auto-download FFmpeg for slideshow rendering:", err);
+          }
+        }
 
         const ffmpegArgs = [
           "-y",
