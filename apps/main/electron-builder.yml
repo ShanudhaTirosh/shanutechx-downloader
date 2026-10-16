@@ -3,7 +3,7 @@ productName: STX Downloader
 executableName: stx-downloader
 copyright: "© 2026 STX Downloader • SHANUTECHX"
 directories:
-  output: dist
+  output: release
   buildResources: ../../build
 files:
   - dist/**/*
