@@ -20,7 +20,7 @@
     "electron-log": "^5.2.0",
     "better-sqlite3": "^11.5.0",
     "drizzle-orm": "^0.36.0",
-    "undici": "^6.20.0",
+    "undici": "^6.29.1",
     "webtorrent": "^3.0.16",
     "@napi-rs/keyring": "^1.3.0"
   },
