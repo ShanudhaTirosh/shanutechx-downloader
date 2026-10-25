@@ -26,7 +26,7 @@
   },
   "devDependencies": {
     "@shanutechx/shared-types": "workspace:*",
-    "electron": "^33.0.0",
+    "electron": "^42.11.16",
     "esbuild": "^0.24.0",
     "electron-builder": "^25.1.0",
     "@electron/rebuild": "^3.6.1",
